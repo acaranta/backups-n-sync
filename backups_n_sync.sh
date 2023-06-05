@@ -42,42 +42,43 @@ fi
 
 # Main
 export RUNTMSTP=$(date +%Y%m%d)
+if [ -z "${SYNCONLY}" ]; then
 
-if [[ -f ${PRESCRIPT} ]]
-then
-	echo "Found Prescript ... running it"
-	${PRESCRIPT}
-fi
-
-mkdir -p ${BKPDIR} 2>&1 >/dev/null
-
-for datadir in ${DATADIRS} 
-do
-	echo "----------------------------------"
-	
-	if [ -d ${SRC_VOL_BASE}/${datadir} ]; then
-		echo "Directory '${SRC_VOL_BASE}/${datadir}' exists"
-		mkdir -p ${BKPDIR}/${datadir} 2>&1 >/dev/null
-		echo "Creating backup ${BKPDIR}/${datadir}/${datadir}_${RUNTMSTP}.tar.gz"
-		tar czpf ${BKPDIR}/${datadir}/${datadir}_${RUNTMSTP}.tar.gz ${SRC_VOL_BASE}/${datadir}
-
-		echo "Cleaning old backups to keep only ${MAXBKP} files"
-		bkp_files=($(ls ${BKPDIR}/${datadir} |sort -r))
-		n=$MAXBKP
-		for file in "${bkp_files[@]}"; do
-			if [ "$n" -le 0 ]; then
-				rm "${BKPDIR}/${datadir}/$file"
-				echo "-Removing '${BKPDIR}/${datadir}/$file'"
-			else
-				echo "+Keeping '${BKPDIR}/${datadir}/$file'"
-				((n--))
-			fi
-		done
-	else
-		echo "Volume/dir '${SRC_VOL_BASE}/${datadir}' does not exists ... Skipping"
+	if [[ -f ${PRESCRIPT} ]]
+	then
+		echo "Found Prescript ... running it"
+		${PRESCRIPT}
 	fi
-done
 
+	mkdir -p ${BKPDIR} 2>&1 >/dev/null
+
+	for datadir in ${DATADIRS} 
+	do
+		echo "----------------------------------"
+		
+		if [ -d ${SRC_VOL_BASE}/${datadir} ]; then
+			echo "Directory '${SRC_VOL_BASE}/${datadir}' exists"
+			mkdir -p ${BKPDIR}/${datadir} 2>&1 >/dev/null
+			echo "Creating backup ${BKPDIR}/${datadir}/${datadir}_${RUNTMSTP}.tar.gz"
+			tar czpf ${BKPDIR}/${datadir}/${datadir}_${RUNTMSTP}.tar.gz ${SRC_VOL_BASE}/${datadir}
+
+			echo "Cleaning old backups to keep only ${MAXBKP} files"
+			bkp_files=($(ls ${BKPDIR}/${datadir} |sort -r))
+			n=$MAXBKP
+			for file in "${bkp_files[@]}"; do
+				if [ "$n" -le 0 ]; then
+					rm "${BKPDIR}/${datadir}/$file"
+					echo "-Removing '${BKPDIR}/${datadir}/$file'"
+				else
+					echo "+Keeping '${BKPDIR}/${datadir}/$file'"
+					((n--))
+				fi
+			done
+		else
+			echo "Volume/dir '${SRC_VOL_BASE}/${datadir}' does not exists ... Skipping"
+		fi
+	done
+fi
 echo "----------------------------------"
 echo "----------------------------------"
 echo "Syncing to ${RCLONE_TARGET} ${RCLONE_PREFIX}/${HOSTID}/${RCLONE_SUFFIX}"
