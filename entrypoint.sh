@@ -14,6 +14,8 @@ while [ "$LOOPIT" = true ]; do
     else
         echo "Will wakeup at ${WAKEUPTIME}"
     fi
+    current_time=$(date +%s)
+    target_time=$(date -d "${WAKEUPTIME}" +%s)
     
     
     if [ "$LOOPIT" = true ]; then
@@ -24,11 +26,11 @@ while [ "$LOOPIT" = true ]; do
                 SKIPFIRSTRUN=false
             fi
             
+            # reset the target time to the next day
+            target_time=$(date -d "tomorrow ${WAKEUPTIME}" +%s)
         fi
-        
-        current_time=$(date +%s)
-        target_time=$(date -d "${WAKEUPTIME}" +%s)
         # calculate duration of sleep
+        current_time=$(date +%s)
         sleep_duration=$((target_time - current_time))
         
         # sleep until next wake-up time
