@@ -6,7 +6,7 @@ The idea is to :
 * create a daily tar.gz of specific directories found in the mounted `/data` and listed in the `/bns/backup_vols.txt` (1 per line)
 * theses tar.gz willl be stored in the mounted `/backups` directory under `$HOSTID` subdir (if HOTSID is not set it will use the container hostname, therefore ... specify it lol)
 * it will only keep there a maximum of `MAXBKP` files (default is 7)
-* finally, using rclone (with a configuration mounted in `/config/rclone/rclone.conf`) it will upload the contents of `/backups/$HOSTID` to `$RCLONE_TARGET:$RCL_PREFIX/$HOSTID/$RCL_SUFFIX`
+* finally, using rclone (with a configuration mounted in `/config/rclone/rclone.conf`) it will upload the contents of `/backups/$HOSTID` to `$RCL_TARGET:$RCL_PREFIX/$HOSTID/$RCL_SUFFIX`
 
 Configure rclone out of this container, and mount its configuration.
 
