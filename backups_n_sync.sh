@@ -81,5 +81,5 @@ if [ -z "${SYNCONLY}" ]; then
 fi
 echo "----------------------------------"
 echo "----------------------------------"
-echo "Syncing to ${RCLONE_TARGET} ${RCLONE_PREFIX}/${HOSTID}/${RCLONE_SUFFIX}"
-rclone -v --progress sync ${BKPDIR} ${RCLONE_TARGET}:${RCLONE_PREFIX}/${HOSTID}/${RCLONE_SUFFIX}
+echo "Syncing to ${RCLONE_TARGET} ${RCL_PREFIX}/${HOSTID}/${RCL_SUFFIX}"
+rclone -v --progress sync ${BKPDIR} ${RCLONE_TARGET}:${RCL_PREFIX}/${HOSTID}/${RCL_SUFFIX}

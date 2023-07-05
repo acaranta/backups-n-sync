@@ -29,8 +29,8 @@ ENV SRC_VOL_BASE="/data"
 ENV BKP_BASE_DIR="/backups"
 ENV MAXBKP=7
 ENV RCLONE_TARGET=""
-ENV RCLONE_PREFIX="Backups"
-ENV RCLONE_SUFFIX="dockervolumes"
+ENV RCL_PREFIX="Backups"
+ENV RCL_SUFFIX="dockervolumes"
 
 WORKDIR /data
 CMD /entrypoint.sh 
