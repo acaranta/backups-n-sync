@@ -3,5 +3,5 @@ kind: template
 load: docker-build-multiarch.yaml
 data:
   dockerfiledir: .
-  imagename: docker-dropbox
+  imagename: backup_n_sync
   imagetag: latest  
