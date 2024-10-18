@@ -5,3 +5,4 @@ data:
   dockerfiledir: .
   imagename: backup_n_sync
   imagetag: latest  
+  branches: ['master', 'main']
