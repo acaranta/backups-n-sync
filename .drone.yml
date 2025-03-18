@@ -3,6 +3,6 @@ kind: template
 load: docker-build-multiarch.yaml
 data:
   dockerfiledir: .
-  imagename: backup_n_sync
+  imagename: infra/backup_n_sync
   imagetag: latest  
   branches: ['master', 'main']
