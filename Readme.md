@@ -52,7 +52,8 @@ services:
     volumes:
       # Configuration files (read-only)
       - /srv/backupsconf/bns:/config/bns/:ro
-      - /srv/backupsconf/rclone/config/rclone:/config/rclone:ro
+      # Rclone configuration must not be readonly
+      - /srv/backupsconf/rclone/config/rclone:/config/rclone
       # Temporary backup directory (only needs space for 1 backup)
       - /srv/backups:/backups
       # Source data to backup (read-only recommended)
