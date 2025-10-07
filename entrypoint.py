@@ -65,8 +65,15 @@ def run_backup():
 
 def main():
     """Main entrypoint logic"""
+    log("=" * 50)
+    log("Backup and Sync - Starting")
+    log("=" * 50)
+
     wakeup_time_str = os.environ.get('WAKEUPTIME', '')
     skip_first_run = os.environ.get('SKIPFIRSTRUN', 'false').lower() in ('true', '1', 'yes')
+
+    now = datetime.now()
+    log(f"Current time: {now.strftime('%Y-%m-%d %H:%M:%S')}")
 
     if not wakeup_time_str:
         # Run once and exit
@@ -77,6 +84,7 @@ def main():
     # Parse wakeup time
     wakeup_time = parse_time(wakeup_time_str)
     log(f"Scheduler started with wakeup time: {wakeup_time_str}")
+    log(f"SKIPFIRSTRUN is {'enabled' if skip_first_run else 'disabled'}")
 
     # Check if we should run immediately
     if not skip_first_run:
@@ -84,6 +92,18 @@ def main():
         if now >= wakeup_time:
             log("Current time is past wakeup time, running backup now")
             run_backup()
+        else:
+            next_run = get_next_run_time(wakeup_time)
+            wait_seconds = (next_run - datetime.now()).total_seconds()
+            log(f"Current time is before wakeup time")
+            log(f"Next backup scheduled for: {next_run.strftime('%Y-%m-%d %H:%M:%S')}")
+            log(f"Waiting {int(wait_seconds)}s ({int(wait_seconds/3600)}h {int((wait_seconds%3600)/60)}m) until first run")
+    else:
+        next_run = get_next_run_time(wakeup_time)
+        wait_seconds = (next_run - datetime.now()).total_seconds()
+        log(f"First run skipped (SKIPFIRSTRUN enabled)")
+        log(f"Next backup scheduled for: {next_run.strftime('%Y-%m-%d %H:%M:%S')}")
+        log(f"Waiting {int(wait_seconds)}s ({int(wait_seconds/3600)}h {int((wait_seconds%3600)/60)}m) until next run")
 
     # Main loop
     while True:
@@ -91,7 +111,6 @@ def main():
         now = datetime.now()
         sleep_seconds = (next_run - now).total_seconds()
 
-        log(f"Next backup scheduled for: {next_run.strftime('%Y-%m-%d %H:%M:%S')}")
         log(f"Going to sleep for {int(sleep_seconds)}s")
 
         time.sleep(sleep_seconds)
