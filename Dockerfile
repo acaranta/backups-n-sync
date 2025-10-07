@@ -1,24 +1,31 @@
 FROM rclone/rclone:latest AS rclone-base
 
 # Begin final image
-FROM ubuntu:focal
-ENV DEBIAN_FRONTEND="noninteractive" 
+FROM ubuntu:noble
+ENV DEBIAN_FRONTEND="noninteractive"
 
 RUN echo "tzdata tzdata/Areas select Europe" | debconf-set-selections && \
   echo "tzdata tzdata/Zones/Europe select Paris" | debconf-set-selections && \
   echo "locales locales/locales_to_be_generated multiselect C.UTF-8 UTF-8" | debconf-set-selections && \
   echo "locales locales/default_environment_locale select C.UTF-8" | debconf-set-selections && \
-  apt update && apt install -y ca-certificates tzdata fuse3 mysql-client && \
+  apt update && apt install -y ca-certificates tzdata fuse3 mysql-client python3 python3-pip curl && \
   echo "user_allow_other" >> /etc/fuse.conf && \
-  apt-get clean && \ 
+  apt-get clean && \
   rm -rf /var/lib/apt/lists/*
 
-COPY --from=rclone-base /usr/local/bin/rclone /usr/local/bin/rclone
-ADD backups_n_sync.sh /usr/local/bin/
-ADD entrypoint.sh /
+# Install uv
+RUN curl -LsSf https://astral.sh/uv/install.sh | sh
+ENV PATH="/root/.local/bin:${PATH}"
 
-RUN chmod +x /usr/local/bin/backups_n_sync.sh
-RUN chmod +x /entrypoint.sh
+COPY --from=rclone-base /usr/local/bin/rclone /usr/local/bin/rclone
+
+# Copy Python application
+COPY pyproject.toml /app/
+COPY backups_n_sync.py /usr/local/bin/
+COPY entrypoint.py /
+
+RUN chmod +x /usr/local/bin/backups_n_sync.py
+RUN chmod +x /entrypoint.py
 
 ENV XDG_CONFIG_HOME=/config
 
@@ -33,4 +40,4 @@ ENV RCL_PREFIX="Backups"
 ENV RCL_SUFFIX="dockervolumes"
 
 WORKDIR /data
-CMD /entrypoint.sh 
+CMD ["/usr/bin/python3", "/entrypoint.py"] 

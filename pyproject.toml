@@ -1,0 +1,10 @@
+[project]
+name = "backups-n-sync"
+version = "2.0.0"
+description = "Docker container for backing up volumes and syncing to rclone targets"
+requires-python = ">=3.11"
+dependencies = []
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
