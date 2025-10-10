@@ -206,7 +206,7 @@ def main():
     hostid = os.environ.get('HOSTID', os.uname().nodename)
     max_backups = int(os.environ.get('MAXBKP', '7'))
     rclone_target = os.environ.get('RCL_TARGET', '')
-    rclone_prefix = os.environ.get('RCL_PREFIX', 'Backups')
+    rclone_prefix = os.environ.get('RCL_PREFIX', '')
     rclone_suffix = os.environ.get('RCL_SUFFIX', 'dockervolumes')
     sync_only = os.environ.get('SYNCONLY', '')
 
