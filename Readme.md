@@ -8,7 +8,8 @@ A Docker container for automated backups with rclone synchronization.
 * **Volume-based backups**: Creates daily tar.gz archives of directories listed in `/config/bns/backup_vols.txt` (one per line)
 * **Efficient storage**: Backups are uploaded to rclone target and removed from local storage immediately
 * **Remote retention**: Retention policy (`MAXBKP`) is applied directly on the rclone target, not locally
-* **Pre-backup scripts**: Optional bash script execution before backups (`/config/bns/backup_pre_script.sh`)
+* **Global pre/post scripts**: Optional bash scripts executed before and after the entire backup cycle
+* **Volume-specific pre/post scripts**: Optional per-volume scripts executed before and after each individual volume backup
 * **Flexible configuration**: Uses rclone for any cloud storage backend
 
 ## Architecture (v2.0)
@@ -28,17 +29,19 @@ Configure rclone outside of this container and mount its configuration file.
 
 ## Environment Variables
 
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `HOSTID` | hostname | Identifier for this host (used in backup paths) |
-| `WAKEUPTIME` | - | Daily backup time in HH:MM format (e.g., "09:20"). If not set, runs once and exits |
-| `SKIPFIRSTRUN` | false | Skip first run if current time is past WAKEUPTIME |
-| `SRC_VOL_BASE` | /data | Base directory containing volumes to backup |
-| `BKP_BASE_DIR` | /backups | Temporary local directory for backups (only used during upload) |
-| `MAXBKP` | 7 | Maximum number of backups to retain on rclone target |
-| `RCL_TARGET` | - | Rclone remote name (required) |
-| `RCL_PREFIX` | Backups | Prefix path on rclone target |
-| `RCL_SUFFIX` | dockervolumes | Suffix path on rclone target |
+| Variable | Required | Default | Description |
+|----------|----------|---------|-------------|
+| `HOSTID` | Optional | hostname | Identifier for this host (used in backup paths) |
+| `WAKEUPTIME` | Optional | - | Daily backup time in HH:MM format (e.g., "09:20"). If not set, runs once and exits |
+| `SKIPFIRSTRUN` | Optional | false | Skip first run if current time is past WAKEUPTIME |
+| `SRC_VOL_BASE` | Optional | /data | Base directory containing volumes to backup |
+| `BKP_BASE_DIR` | Optional | /backups | Temporary local directory for backups (only used during upload) |
+| `MAXBKP` | Optional | 7 | Maximum number of backups to retain on rclone target |
+| `PRESCRIPT` | Optional | /config/bns/backup_pre_script.sh | Path to global pre-backup script |
+| `POSTSCRIPT` | Optional | /config/bns/backup_post_script.sh | Path to global post-backup script |
+| `RCL_TARGET` | **Required** | - | Rclone remote name |
+| `RCL_PREFIX` | **Required** | - | Prefix path on rclone target |
+| `RCL_SUFFIX` | Optional | dockervolumes | Suffix path on rclone target |
 
 **Final backup path**: `$RCL_TARGET:$RCL_PREFIX/$HOSTID/$RCL_SUFFIX/{volume_name}/`
 
@@ -84,12 +87,69 @@ volume2
 volume4
 ```
 
-### `/config/bns/backup_pre_script.sh` (optional)
+### Global Scripts (optional)
 
-Bash script executed before backups. Useful for database dumps or other pre-backup tasks.
+#### `/config/bns/backup_pre_script.sh`
+
+Bash script executed **once before** the entire backup cycle starts. Useful for global setup tasks.
 
 ```bash
 #!/bin/bash
-# Example: dump MySQL database
-mysqldump -h db-host -u user -ppassword mydb > /data/mydb/dump.sql
+# Example: global notification
+echo "Starting backup cycle" | mail -s "Backup Started" admin@example.com
+```
+
+#### `/config/bns/backup_post_script.sh`
+
+Bash script executed **once after** the entire backup cycle completes. Useful for cleanup or notifications.
+
+```bash
+#!/bin/bash
+# Example: global cleanup or notification
+echo "Backup cycle completed" | mail -s "Backup Complete" admin@example.com
+```
+
+**Behavior**:
+- If global prescript fails, backup continues anyway (logs warning)
+- If global postscript fails, error is logged (logs warning)
+
+### Volume-Specific Scripts (optional)
+
+Each volume can have its own pre/post scripts located within the volume's directory:
+
+#### `<volume_path>/.bkpnsync/prescript.sh`
+
+Bash script executed **before backing up** this specific volume. Useful for database dumps or volume-specific preparation.
+
+```bash
+#!/bin/bash
+# Example: dump PostgreSQL database for this volume
+docker exec my-postgres-container pg_dump -U user mydb > /data/myvolume/dump.sql
+```
+
+#### `<volume_path>/.bkpnsync/postscript.sh`
+
+Bash script executed **after successfully backing up** this specific volume. Useful for cleanup tasks.
+
+```bash
+#!/bin/bash
+# Example: remove temporary dump file
+rm -f /data/myvolume/dump.sql
+```
+
+**Behavior**:
+- If volume prescript fails, **that volume's backup is skipped** (other volumes continue)
+- If volume postscript fails, error is logged but process continues (logs warning)
+- The `.bkpnsync` directory **is included** in the backup archive
+
+**Example structure**:
+```
+/data/
+  ├── volume1/
+  │   ├── .bkpnsync/
+  │   │   ├── prescript.sh
+  │   │   └── postscript.sh
+  │   └── ... (volume data)
+  └── volume2/
+      └── ... (volume data, no scripts)
 ```
