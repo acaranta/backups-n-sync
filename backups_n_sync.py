@@ -77,6 +77,32 @@ def run_postscript(postscript_path):
             log(f"WARNING: Postscript failed: {e}")
 
 
+def run_volume_prescript(volume_path, volume_name):
+    """Run volume-specific pre-backup script if it exists"""
+    prescript_path = os.path.join(volume_path, '.bkpnsync', 'prescript.sh')
+    if os.path.exists(prescript_path):
+        log(f"Found volume-specific prescript for '{volume_name}' ... running it")
+        try:
+            run_command(f"bash {prescript_path}")
+            return True
+        except Exception as e:
+            log(f"ERROR: Volume-specific prescript failed for '{volume_name}': {e}")
+            log(f"Skipping backup for volume '{volume_name}'")
+            return False
+    return True
+
+
+def run_volume_postscript(volume_path, volume_name):
+    """Run volume-specific post-backup script if it exists"""
+    postscript_path = os.path.join(volume_path, '.bkpnsync', 'postscript.sh')
+    if os.path.exists(postscript_path):
+        log(f"Found volume-specific postscript for '{volume_name}' ... running it")
+        try:
+            run_command(f"bash {postscript_path}")
+        except Exception as e:
+            log(f"WARNING: Volume-specific postscript failed for '{volume_name}': {e}")
+
+
 def create_backup(source_path, backup_file):
     """Create a tar.gz backup of the source directory"""
     log(f"Creating backup: {backup_file}")
@@ -226,6 +252,11 @@ def main():
 
             log(f"Directory '{source_path}' exists")
 
+            # Run volume-specific prescript if it exists
+            if not run_volume_prescript(source_path, volume):
+                # Prescript failed, skip this volume
+                continue
+
             # Create temporary local backup
             temp_backup_dir = os.path.join(bkp_base_dir, hostid, volume)
             backup_filename = f"{volume}_{run_timestamp}.tar.gz"
@@ -244,6 +275,9 @@ def main():
 
                 # Apply retention policy on remote
                 apply_retention_policy(rclone_target, remote_base_path, max_backups)
+
+                # Run volume-specific postscript if it exists
+                run_volume_postscript(source_path, volume)
 
             except Exception as e:
                 log(f"ERROR: Failed to backup {volume}: {e}")
