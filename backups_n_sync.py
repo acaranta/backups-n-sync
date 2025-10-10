@@ -226,6 +226,11 @@ def main():
         log("ERROR: RCL_TARGET is not set")
         sys.exit(1)
 
+    # Check rclone prefix
+    if not rclone_prefix:
+        log("ERROR: RCL_PREFIX is not set")
+        sys.exit(1)
+
     # Generate timestamp
     run_timestamp = datetime.now().strftime('%Y%m%d')
 
