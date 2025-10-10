@@ -8,9 +8,9 @@ RUN echo "tzdata tzdata/Areas select Europe" | debconf-set-selections && \
   echo "tzdata tzdata/Zones/Europe select Paris" | debconf-set-selections && \
   echo "locales locales/locales_to_be_generated multiselect C.UTF-8 UTF-8" | debconf-set-selections && \
   echo "locales locales/default_environment_locale select C.UTF-8" | debconf-set-selections && \
-  apt update && apt install -y ca-certificates tzdata fuse3 mysql-client python3 python3-pip curl && \
+  apt update && apt install -y ca-certificates tzdata fuse3 mysql-client python3 python3-pip curl jq && \
   echo "user_allow_other" >> /etc/fuse.conf && \
-  apt-get clean && \
+  apt clean && \
   rm -rf /var/lib/apt/lists/*
 
 # Install uv
