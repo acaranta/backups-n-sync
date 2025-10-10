@@ -67,6 +67,16 @@ def run_prescript(prescript_path):
             log("Continuing with backup anyway...")
 
 
+def run_postscript(postscript_path):
+    """Run post-backup script if it exists"""
+    if os.path.exists(postscript_path):
+        log(f"Found postscript ... running it")
+        try:
+            run_command(f"bash {postscript_path}")
+        except Exception as e:
+            log(f"WARNING: Postscript failed: {e}")
+
+
 def create_backup(source_path, backup_file):
     """Create a tar.gz backup of the source directory"""
     log(f"Creating backup: {backup_file}")
@@ -164,6 +174,7 @@ def main():
     # Read environment variables
     volumes_list = os.environ.get('VOLSLIST', '/config/bns/backup_vols.txt')
     prescript = os.environ.get('PRESCRIPT', '/config/bns/backup_pre_script.sh')
+    postscript = os.environ.get('POSTSCRIPT', '/config/bns/backup_post_script.sh')
     src_vol_base = os.environ.get('SRC_VOL_BASE', '/data')
     bkp_base_dir = os.environ.get('BKP_BASE_DIR', '/backups')
     hostid = os.environ.get('HOSTID', os.uname().nodename)
@@ -243,6 +254,9 @@ def main():
 
     log("----------------------------------")
     log("Backup cycle completed")
+
+    # Run postscript if exists
+    run_postscript(postscript)
 
 
 if __name__ == '__main__':
