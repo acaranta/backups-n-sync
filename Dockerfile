@@ -29,6 +29,9 @@ RUN chmod +x /entrypoint.py
 
 ENV XDG_CONFIG_HOME=/config
 
+# Force Python to run in unbuffered mode for real-time Docker logs
+ENV PYTHONUNBUFFERED=1
+
 ENV HOSTID=""
 ENV WAKEUPTIME=""
 ENV SKIPFIRSTRUN=false
@@ -40,4 +43,4 @@ ENV RCL_PREFIX="Backups"
 ENV RCL_SUFFIX="dockervolumes"
 
 WORKDIR /data
-CMD ["/usr/bin/python3", "/entrypoint.py"] 
+CMD ["/usr/bin/python3", "-u", "/entrypoint.py"] 

@@ -6,6 +6,7 @@ Creates tar.gz backups, uploads to rclone, and manages remote retention policy
 
 import os
 import sys
+import logging
 import subprocess
 import tarfile
 from pathlib import Path
@@ -13,9 +14,25 @@ from datetime import datetime
 import re
 
 
+# Configure logging for Docker-friendly output
+logging.basicConfig(
+    level=logging.INFO,
+    format='[%(asctime)s] %(message)s',
+    datefmt='%Y-%m-%d %H:%M:%S',
+    stream=sys.stdout,
+    force=True
+)
+# Ensure immediate flushing
+logging.root.handlers[0].setFormatter(logging.Formatter('[%(asctime)s] %(message)s', datefmt='%Y-%m-%d %H:%M:%S'))
+logging.root.handlers[0].flush = lambda: sys.stdout.flush()
+
+logger = logging.getLogger(__name__)
+
+
 def log(message):
     """Print log message with timestamp"""
-    print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] {message}")
+    logger.info(message)
+    sys.stdout.flush()
 
 
 def run_command(cmd, check=True, capture_output=False):
@@ -31,7 +48,16 @@ def run_command(cmd, check=True, capture_output=False):
             )
             return result.stdout.strip()
         else:
-            subprocess.run(cmd, shell=True, check=check)
+            # Stream output in real-time to stdout/stderr
+            subprocess.run(
+                cmd,
+                shell=True,
+                check=check,
+                stdout=sys.stdout,
+                stderr=sys.stderr
+            )
+            sys.stdout.flush()
+            sys.stderr.flush()
             return None
     except subprocess.CalledProcessError as e:
         log(f"ERROR: Command failed: {cmd}")

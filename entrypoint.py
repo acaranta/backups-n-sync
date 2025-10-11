@@ -7,13 +7,30 @@ Handles scheduled execution of backup tasks
 import os
 import sys
 import time
+import logging
 from datetime import datetime, timedelta
 import subprocess
 
 
+# Configure logging for Docker-friendly output
+logging.basicConfig(
+    level=logging.INFO,
+    format='[%(asctime)s] %(message)s',
+    datefmt='%Y-%m-%d %H:%M:%S',
+    stream=sys.stdout,
+    force=True
+)
+# Ensure immediate flushing
+logging.root.handlers[0].setFormatter(logging.Formatter('[%(asctime)s] %(message)s', datefmt='%Y-%m-%d %H:%M:%S'))
+logging.root.handlers[0].flush = lambda: sys.stdout.flush()
+
+logger = logging.getLogger(__name__)
+
+
 def log(message):
     """Print log message with timestamp"""
-    print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] {message}")
+    logger.info(message)
+    sys.stdout.flush()
 
 
 def parse_time(time_str):
@@ -46,9 +63,13 @@ def run_backup():
     start_time = time.time()
 
     try:
+        # Run subprocess with unbuffered output and real-time streaming
         result = subprocess.run(
-            [sys.executable, '/usr/local/bin/backups_n_sync.py'],
-            check=True
+            [sys.executable, '-u', '/usr/local/bin/backups_n_sync.py'],
+            check=True,
+            stdout=sys.stdout,
+            stderr=sys.stderr,
+            env={**os.environ, 'PYTHONUNBUFFERED': '1'}
         )
         elapsed = time.time() - start_time
         log("=" * 50)
