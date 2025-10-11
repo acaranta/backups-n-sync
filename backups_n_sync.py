@@ -147,7 +147,7 @@ def upload_to_rclone(local_file, remote_path, rclone_target):
     log(f"Uploading to {rclone_target}:{remote_path}")
 
     # Use rclone copy to upload the file
-    run_command(f"rclone -v --progress copy {local_file} {rclone_target}:{remote_path}")
+    run_command(f"rclone copy {local_file} {rclone_target}:{remote_path}")
 
     log(f"Upload completed successfully")
 
