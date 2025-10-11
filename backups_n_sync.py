@@ -8,7 +8,6 @@ import os
 import sys
 import logging
 import subprocess
-import tarfile
 from pathlib import Path
 from datetime import datetime
 import re
@@ -85,7 +84,7 @@ def read_volumes_list(volumes_file):
 def run_prescript(prescript_path):
     """Run pre-backup script if it exists"""
     if os.path.exists(prescript_path):
-        log(f"Found prescript ... running it")
+        log("Found prescript ... running it")
         try:
             run_command(f"bash {prescript_path}")
         except Exception as e:
@@ -96,7 +95,7 @@ def run_prescript(prescript_path):
 def run_postscript(postscript_path):
     """Run post-backup script if it exists"""
     if os.path.exists(postscript_path):
-        log(f"Found postscript ... running it")
+        log("Found postscript ... running it")
         try:
             run_command(f"bash {postscript_path}")
         except Exception as e:
@@ -149,7 +148,7 @@ def upload_to_rclone(local_file, remote_path, rclone_target):
     # Use rclone copy to upload the file
     run_command(f"rclone copy {local_file} {rclone_target}:{remote_path}")
 
-    log(f"Upload completed successfully")
+    log("Upload completed successfully")
 
 
 def delete_local_backup(backup_file):
