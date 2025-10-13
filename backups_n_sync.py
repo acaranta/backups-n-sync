@@ -8,9 +8,35 @@ import os
 import sys
 import logging
 import subprocess
-from pathlib import Path
 from datetime import datetime
 import re
+import time
+
+
+# Custom exception classes for better error categorization
+class BackupError(Exception):
+    """Base exception for backup operations"""
+    pass
+
+
+class RcloneError(BackupError):
+    """Exception for rclone-related errors"""
+    pass
+
+
+class BackupCreationError(BackupError):
+    """Exception for backup creation errors"""
+    pass
+
+
+class RetentionPolicyError(BackupError):
+    """Exception for retention policy errors"""
+    pass
+
+
+class ScriptExecutionError(BackupError):
+    """Exception for pre/post script execution errors"""
+    pass
 
 
 # Configure logging for Docker-friendly output
@@ -34,35 +60,63 @@ def log(message):
     sys.stdout.flush()
 
 
-def run_command(cmd, check=True, capture_output=False):
-    """Run a shell command and return result"""
-    try:
-        if capture_output:
-            result = subprocess.run(
-                cmd,
-                shell=True,
-                check=check,
-                capture_output=True,
-                text=True
-            )
-            return result.stdout.strip()
-        else:
-            # Stream output in real-time to stdout/stderr
-            subprocess.run(
-                cmd,
-                shell=True,
-                check=check,
-                stdout=sys.stdout,
-                stderr=sys.stderr
-            )
-            sys.stdout.flush()
-            sys.stderr.flush()
-            return None
-    except subprocess.CalledProcessError as e:
-        log(f"ERROR: Command failed: {cmd}")
-        if capture_output and e.stderr:
-            log(f"ERROR: {e.stderr}")
-        raise
+def run_command(cmd, check=True, capture_output=False, retries=0, retry_delay=1):
+    """Run a shell command with retry support
+    
+    Args:
+        cmd: Command to execute
+        check: Raise exception on error
+        capture_output: Capture and return output
+        retries: Number of retry attempts (0 = no retries)
+        retry_delay: Base delay between retries in seconds (exponential backoff)
+    
+    Returns:
+        Command output if capture_output=True, None otherwise
+    """
+    last_error = None
+    
+    for attempt in range(retries + 1):
+        try:
+            if capture_output:
+                result = subprocess.run(
+                    cmd,
+                    shell=True,
+                    check=check,
+                    capture_output=True,
+                    text=True
+                )
+                return result.stdout.strip()
+            else:
+                # Stream output in real-time to stdout/stderr
+                subprocess.run(
+                    cmd,
+                    shell=True,
+                    check=check,
+                    stdout=sys.stdout,
+                    stderr=sys.stderr
+                )
+                sys.stdout.flush()
+                sys.stderr.flush()
+                return None
+        except subprocess.CalledProcessError as e:
+            last_error = e
+            if attempt < retries:
+                # Calculate exponential backoff delay
+                delay = retry_delay * (2 ** attempt)
+                log(f"WARNING: Command failed (attempt {attempt + 1}/{retries + 1}): {cmd}")
+                if capture_output and e.stderr:
+                    log(f"WARNING: {e.stderr}")
+                log(f"Retrying in {delay} seconds...")
+                time.sleep(delay)
+            else:
+                log(f"ERROR: Command failed after {retries + 1} attempts: {cmd}")
+                if capture_output and e.stderr:
+                    log(f"ERROR: {e.stderr}")
+                raise
+    
+    # Should not reach here, but just in case
+    if last_error and check:
+        raise last_error
 
 
 def read_volumes_list(volumes_file):
@@ -87,6 +141,9 @@ def run_prescript(prescript_path):
         log("Found prescript ... running it")
         try:
             run_command(f"bash {prescript_path}")
+        except subprocess.CalledProcessError as e:
+            log(f"WARNING: Prescript failed with exit code {e.returncode}")
+            log("Continuing with backup anyway...")
         except Exception as e:
             log(f"WARNING: Prescript failed: {e}")
             log("Continuing with backup anyway...")
@@ -98,6 +155,8 @@ def run_postscript(postscript_path):
         log("Found postscript ... running it")
         try:
             run_command(f"bash {postscript_path}")
+        except subprocess.CalledProcessError as e:
+            log(f"WARNING: Postscript failed with exit code {e.returncode}")
         except Exception as e:
             log(f"WARNING: Postscript failed: {e}")
 
@@ -110,6 +169,10 @@ def run_volume_prescript(volume_path, volume_name):
         try:
             run_command(f"bash {prescript_path}")
             return True
+        except subprocess.CalledProcessError as e:
+            log(f"ERROR: Volume-specific prescript failed for '{volume_name}' with exit code {e.returncode}")
+            log(f"Skipping backup for volume '{volume_name}'")
+            return False
         except Exception as e:
             log(f"ERROR: Volume-specific prescript failed for '{volume_name}': {e}")
             log(f"Skipping backup for volume '{volume_name}'")
@@ -124,31 +187,60 @@ def run_volume_postscript(volume_path, volume_name):
         log(f"Found volume-specific postscript for '{volume_name}' ... running it")
         try:
             run_command(f"bash {postscript_path}")
+        except subprocess.CalledProcessError as e:
+            log(f"WARNING: Volume-specific postscript failed for '{volume_name}' with exit code {e.returncode}")
         except Exception as e:
             log(f"WARNING: Volume-specific postscript failed for '{volume_name}': {e}")
 
 
 def create_backup(source_path, backup_file):
-    """Create a tar.gz backup of the source directory"""
+    """Create a tar.gz backup of the source directory
+    
+    Raises:
+        BackupCreationError: If backup creation fails
+    """
     log(f"Creating backup: {backup_file}")
 
-    # Create parent directory if needed
-    os.makedirs(os.path.dirname(backup_file), exist_ok=True)
+    try:
+        # Create parent directory if needed
+        os.makedirs(os.path.dirname(backup_file), exist_ok=True)
 
-    # Create tar.gz using tar command (faster and preserves permissions better)
-    run_command(f"tar czpf {backup_file} {source_path}")
+        # Create tar.gz using tar command (faster and preserves permissions better)
+        run_command(f"tar czpf {backup_file} {source_path}")
 
-    log(f"Backup created successfully: {backup_file}")
+        log(f"Backup created successfully: {backup_file}")
+    except subprocess.CalledProcessError as e:
+        raise BackupCreationError(f"Failed to create backup of {source_path}: {e}")
+    except Exception as e:
+        raise BackupCreationError(f"Unexpected error creating backup of {source_path}: {e}")
 
 
-def upload_to_rclone(local_file, remote_path, rclone_target):
-    """Upload a file to rclone target"""
+def upload_to_rclone(local_file, remote_path, rclone_target, max_retries=3):
+    """Upload a file to rclone target with retry support
+    
+    Args:
+        local_file: Path to local file to upload
+        remote_path: Remote destination path
+        rclone_target: Rclone remote name
+        max_retries: Maximum number of retry attempts
+    
+    Raises:
+        RcloneError: If upload fails after all retries
+    """
     log(f"Uploading to {rclone_target}:{remote_path}")
 
-    # Use rclone copy to upload the file
-    run_command(f"rclone copy {local_file} {rclone_target}:{remote_path}")
-
-    log("Upload completed successfully")
+    try:
+        # Use rclone copy with retry support for transient network issues
+        run_command(
+            f"rclone copy {local_file} {rclone_target}:{remote_path}",
+            retries=max_retries,
+            retry_delay=2
+        )
+        log("Upload completed successfully")
+    except subprocess.CalledProcessError as e:
+        raise RcloneError(f"Failed to upload {local_file} to {rclone_target}:{remote_path} after {max_retries + 1} attempts: {e}")
+    except Exception as e:
+        raise RcloneError(f"Unexpected error uploading {local_file}: {e}")
 
 
 def delete_local_backup(backup_file):
@@ -158,13 +250,24 @@ def delete_local_backup(backup_file):
         log(f"Deleted local backup: {backup_file}")
 
 
-def list_remote_backups(rclone_target, remote_dir):
-    """List backup files in remote directory"""
+def list_remote_backups(rclone_target, remote_dir, max_retries=2):
+    """List backup files in remote directory with retry support
+    
+    Args:
+        rclone_target: Rclone remote name
+        remote_dir: Remote directory path
+        max_retries: Maximum number of retry attempts
+    
+    Returns:
+        List of backup filenames
+    """
     try:
-        # Use rclone lsf to list files
+        # Use rclone lsf to list files with retry support
         output = run_command(
             f"rclone lsf {rclone_target}:{remote_dir}",
-            capture_output=True
+            capture_output=True,
+            retries=max_retries,
+            retry_delay=1
         )
 
         if not output:
@@ -172,6 +275,9 @@ def list_remote_backups(rclone_target, remote_dir):
 
         files = [f.strip() for f in output.split('\n') if f.strip()]
         return files
+    except subprocess.CalledProcessError as e:
+        log(f"WARNING: Could not list remote backups in {remote_dir}: {e}")
+        return []
     except Exception as e:
         log(f"WARNING: Could not list remote backups: {e}")
         return []
@@ -184,40 +290,68 @@ def parse_backup_date(filename):
         try:
             date_str = match.group(1)
             return datetime.strptime(date_str, '%Y%m%d')
-        except:
+        except Exception:
             pass
     return None
 
 
 def apply_retention_policy(rclone_target, remote_dir, max_backups):
-    """Apply retention policy to remote backups"""
+    """Apply retention policy to remote backups
+    
+    Args:
+        rclone_target: Rclone remote name
+        remote_dir: Remote directory path
+        max_backups: Maximum number of backups to keep
+    
+    Raises:
+        RetentionPolicyError: If retention policy application fails critically
+    """
     log(f"Applying retention policy (keeping {max_backups} backups)")
 
-    files = list_remote_backups(rclone_target, remote_dir)
+    try:
+        files = list_remote_backups(rclone_target, remote_dir)
 
-    if not files:
-        log("No remote backups found")
-        return
+        if not files:
+            log("No remote backups found")
+            return
 
-    # Parse dates and sort by date (newest first)
-    backups_with_dates = []
-    for f in files:
-        date = parse_backup_date(f)
-        if date:
-            backups_with_dates.append((f, date))
+        # Parse dates and sort by date (newest first)
+        backups_with_dates = []
+        for f in files:
+            date = parse_backup_date(f)
+            if date:
+                backups_with_dates.append((f, date))
 
-    backups_with_dates.sort(key=lambda x: x[1], reverse=True)
+        backups_with_dates.sort(key=lambda x: x[1], reverse=True)
 
-    # Keep max_backups newest, delete the rest
-    for i, (filename, date) in enumerate(backups_with_dates):
-        if i < max_backups:
-            log(f"+Keeping '{filename}' ({date.strftime('%Y-%m-%d')})")
-        else:
-            log(f"-Removing '{filename}' ({date.strftime('%Y-%m-%d')})")
-            try:
-                run_command(f"rclone delete {rclone_target}:{remote_dir}/{filename}")
-            except Exception as e:
-                log(f"WARNING: Failed to delete {filename}: {e}")
+        # Keep max_backups newest, delete the rest
+        deletion_errors = []
+        for i, (filename, date) in enumerate(backups_with_dates):
+            if i < max_backups:
+                log(f"+Keeping '{filename}' ({date.strftime('%Y-%m-%d')})")
+            else:
+                log(f"-Removing '{filename}' ({date.strftime('%Y-%m-%d')})")
+                try:
+                    run_command(
+                        f"rclone delete {rclone_target}:{remote_dir}/{filename}",
+                        retries=2,
+                        retry_delay=1
+                    )
+                except subprocess.CalledProcessError as e:
+                    error_msg = f"Failed to delete {filename} after retries: {e}"
+                    log(f"WARNING: {error_msg}")
+                    deletion_errors.append(error_msg)
+                except Exception as e:
+                    error_msg = f"Failed to delete {filename}: {e}"
+                    log(f"WARNING: {error_msg}")
+                    deletion_errors.append(error_msg)
+        
+        if deletion_errors:
+            log(f"WARNING: {len(deletion_errors)} file(s) failed to delete during retention policy")
+            
+    except Exception as e:
+        # Don't fail the entire backup if retention policy has issues
+        log(f"WARNING: Error applying retention policy: {e}")
 
 
 def main():
@@ -309,8 +443,20 @@ def main():
                 # Run volume-specific postscript if it exists
                 run_volume_postscript(source_path, volume)
 
+            except BackupCreationError as e:
+                log(f"ERROR: Failed to create backup for {volume}: {e}")
+                # Clean up local file if it exists
+                if os.path.exists(local_backup_path):
+                    delete_local_backup(local_backup_path)
+                continue
+            except RcloneError as e:
+                log(f"ERROR: Failed to upload backup for {volume}: {e}")
+                # Clean up local file if it exists
+                if os.path.exists(local_backup_path):
+                    delete_local_backup(local_backup_path)
+                continue
             except Exception as e:
-                log(f"ERROR: Failed to backup {volume}: {e}")
+                log(f"ERROR: Unexpected error backing up {volume}: {e}")
                 # Clean up local file if it exists
                 if os.path.exists(local_backup_path):
                     delete_local_backup(local_backup_path)
