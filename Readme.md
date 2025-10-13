@@ -26,6 +26,14 @@ A Docker container for automated backups with rclone synchronization.
 
 **Benefits**: Local storage only needs space for one backup at a time, while the rclone target stores all retained backups.
 
+## Security Features
+
+* **Non-root user**: Container runs as unprivileged user (UID 1000) for better security
+* **Pinned versions**: Uses specific dated base images and rclone version for reproducibility
+* **Minimal dependencies**: Only installs required packages to reduce attack surface
+* **Multi-stage build**: Efficiently builds rclone from official source
+* **Graceful shutdown**: Handles SIGTERM/SIGINT signals properly without data corruption
+
 ## Configuration
 
 Configure rclone outside of this container and mount its configuration file.
