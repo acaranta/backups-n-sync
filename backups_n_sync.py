@@ -413,6 +413,8 @@ def main():
     # Track volumes for metrics
     volumes_success = 0
     volumes_failed = 0
+    failed_volumes = []  # Track which volumes failed and why
+    successful_volumes = []  # Track successful backups
 
     # Check rclone config
     if not os.path.exists('/config/rclone/rclone.conf'):
@@ -459,6 +461,11 @@ def main():
                 log("Volume/dir does not exist ... Skipping", 'warning', 
                     path=source_path, volume=volume)
                 volumes_failed += 1
+                failed_volumes.append({
+                    'volume': volume,
+                    'error': 'Directory does not exist',
+                    'path': source_path
+                })
                 continue
 
             log("Directory exists", 'debug', path=source_path, volume=volume)
@@ -467,6 +474,11 @@ def main():
             if not run_volume_prescript(source_path, volume):
                 # Prescript failed, skip this volume
                 volumes_failed += 1
+                failed_volumes.append({
+                    'volume': volume,
+                    'error': 'Volume prescript failed',
+                    'path': source_path
+                })
                 continue
 
             # Create temporary local backup
@@ -493,24 +505,47 @@ def main():
                 
                 # Track success
                 volumes_success += 1
+                successful_volumes.append({
+                    'volume': volume,
+                    'backup_file': backup_filename,
+                    'remote_path': remote_base_path
+                })
 
             except BackupCreationError as e:
+                error_msg = str(e)
                 log(f"Failed to create backup: {e}", 'error', volume=volume)
                 volumes_failed += 1
+                failed_volumes.append({
+                    'volume': volume,
+                    'error': f'Backup creation failed: {error_msg}',
+                    'path': source_path
+                })
                 # Clean up local file if it exists
                 if os.path.exists(local_backup_path):
                     delete_local_backup(local_backup_path)
                 continue
             except RcloneError as e:
+                error_msg = str(e)
                 log(f"Failed to upload backup: {e}", 'error', volume=volume)
                 volumes_failed += 1
+                failed_volumes.append({
+                    'volume': volume,
+                    'error': f'Upload failed: {error_msg}',
+                    'path': source_path
+                })
                 # Clean up local file if it exists
                 if os.path.exists(local_backup_path):
                     delete_local_backup(local_backup_path)
                 continue
             except Exception as e:
+                error_msg = str(e)
                 log(f"Unexpected error backing up volume: {e}", 'error', volume=volume)
                 volumes_failed += 1
+                failed_volumes.append({
+                    'volume': volume,
+                    'error': f'Unexpected error: {error_msg}',
+                    'path': source_path
+                })
                 # Clean up local file if it exists
                 if os.path.exists(local_backup_path):
                     delete_local_backup(local_backup_path)
@@ -519,11 +554,39 @@ def main():
     log("----------------------------------", 'info')
     log("Backup cycle completed", 'info')
     
+    # Print summary report
+    log("=" * 50, 'info')
+    log("BACKUP SUMMARY REPORT", 'info')
+    log("=" * 50, 'info')
+    log(f"Total volumes processed: {volumes_success + volumes_failed}", 'info',
+        total=volumes_success + volumes_failed)
+    log(f"Successful backups: {volumes_success}", 'info', success=volumes_success)
+    log(f"Failed backups: {volumes_failed}", 'info', failed=volumes_failed)
+    
+    if successful_volumes:
+        log("", 'info')
+        log("Successfully backed up volumes:", 'info')
+        for item in successful_volumes:
+            log(f"  ✓ {item['volume']}", 'info', 
+                volume=item['volume'], 
+                backup_file=item['backup_file'])
+    
+    if failed_volumes:
+        log("", 'info')
+        log("Failed volumes:", 'error')
+        for item in failed_volumes:
+            log(f"  ✗ {item['volume']}: {item['error']}", 'error',
+                volume=item['volume'],
+                error=item['error'])
+    
+    log("=" * 50, 'info')
+    
     # Update metrics
     update_state(
         volumes_backed_up=volumes_success,
         volumes_failed=volumes_failed,
-        current_operation=None
+        current_operation=None,
+        last_error=failed_volumes[-1]['error'] if failed_volumes else None
     )
 
     # Run postscript if exists
