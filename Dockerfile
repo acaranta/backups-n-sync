@@ -41,6 +41,7 @@ ENV MAXBKP=7
 ENV RCL_TARGET=""
 ENV RCL_PREFIX="Backups"
 ENV RCL_SUFFIX="dockervolumes"
+ENV LOG_LEVEL="INFO"
 
 WORKDIR /data
 CMD ["/usr/bin/python3", "-u", "/entrypoint.py"] 
