@@ -12,6 +12,15 @@ from datetime import datetime
 import re
 import time
 
+# Import health server utilities
+try:
+    from health_server import update_state
+    HEALTH_SERVER_AVAILABLE = True
+except ImportError:
+    HEALTH_SERVER_AVAILABLE = False
+    def update_state(*args, **kwargs):
+        pass
+
 
 # Custom exception classes for better error categorization
 class BackupError(Exception):
@@ -400,6 +409,10 @@ def main():
     log(f"Host ID: {hostid}", 'info', hostid=hostid)
     log(f"Max backups to keep: {max_backups}", 'info', max_backups=max_backups)
     log(f"Base dir for volumes: {src_vol_base}", 'info', base_dir=src_vol_base)
+    
+    # Track volumes for metrics
+    volumes_success = 0
+    volumes_failed = 0
 
     # Check rclone config
     if not os.path.exists('/config/rclone/rclone.conf'):
@@ -436,12 +449,16 @@ def main():
         # Process each volume
         for volume in volumes:
             log("----------------------------------", 'info')
+            
+            # Update current operation
+            update_state(current_operation=f"backing_up_{volume}")
 
             source_path = os.path.join(src_vol_base, volume)
 
             if not os.path.isdir(source_path):
                 log("Volume/dir does not exist ... Skipping", 'warning', 
                     path=source_path, volume=volume)
+                volumes_failed += 1
                 continue
 
             log("Directory exists", 'debug', path=source_path, volume=volume)
@@ -449,6 +466,7 @@ def main():
             # Run volume-specific prescript if it exists
             if not run_volume_prescript(source_path, volume):
                 # Prescript failed, skip this volume
+                volumes_failed += 1
                 continue
 
             # Create temporary local backup
@@ -472,21 +490,27 @@ def main():
 
                 # Run volume-specific postscript if it exists
                 run_volume_postscript(source_path, volume)
+                
+                # Track success
+                volumes_success += 1
 
             except BackupCreationError as e:
                 log(f"Failed to create backup: {e}", 'error', volume=volume)
+                volumes_failed += 1
                 # Clean up local file if it exists
                 if os.path.exists(local_backup_path):
                     delete_local_backup(local_backup_path)
                 continue
             except RcloneError as e:
                 log(f"Failed to upload backup: {e}", 'error', volume=volume)
+                volumes_failed += 1
                 # Clean up local file if it exists
                 if os.path.exists(local_backup_path):
                     delete_local_backup(local_backup_path)
                 continue
             except Exception as e:
                 log(f"Unexpected error backing up volume: {e}", 'error', volume=volume)
+                volumes_failed += 1
                 # Clean up local file if it exists
                 if os.path.exists(local_backup_path):
                     delete_local_backup(local_backup_path)
@@ -494,6 +518,13 @@ def main():
 
     log("----------------------------------", 'info')
     log("Backup cycle completed", 'info')
+    
+    # Update metrics
+    update_state(
+        volumes_backed_up=volumes_success,
+        volumes_failed=volumes_failed,
+        current_operation=None
+    )
 
     # Run postscript if exists
     run_postscript(postscript)

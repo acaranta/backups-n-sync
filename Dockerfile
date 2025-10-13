@@ -22,9 +22,11 @@ COPY --from=rclone-base /usr/local/bin/rclone /usr/local/bin/rclone
 # Copy Python application
 COPY pyproject.toml /app/
 COPY backups_n_sync.py /usr/local/bin/
+COPY health_server.py /usr/local/bin/
 COPY entrypoint.py /
 
 RUN chmod +x /usr/local/bin/backups_n_sync.py
+RUN chmod +x /usr/local/bin/health_server.py
 RUN chmod +x /entrypoint.py
 
 ENV XDG_CONFIG_HOME=/config
@@ -42,6 +44,11 @@ ENV RCL_TARGET=""
 ENV RCL_PREFIX="Backups"
 ENV RCL_SUFFIX="dockervolumes"
 ENV LOG_LEVEL="INFO"
+ENV ENABLE_HEALTH_SERVER="true"
+ENV HEALTH_PORT="8080"
 
 WORKDIR /data
+
+EXPOSE 8080
+
 CMD ["/usr/bin/python3", "-u", "/entrypoint.py"] 

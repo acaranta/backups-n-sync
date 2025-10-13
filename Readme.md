@@ -11,6 +11,9 @@ A Docker container for automated backups with rclone synchronization.
 * **Global pre/post scripts**: Optional bash scripts executed before and after the entire backup cycle
 * **Volume-specific pre/post scripts**: Optional per-volume scripts executed before and after each individual volume backup
 * **Flexible configuration**: Uses rclone for any cloud storage backend
+* **Health checks & monitoring**: Built-in HTTP endpoints for container orchestration and Prometheus metrics
+* **Error handling**: Retry logic with exponential backoff for transient failures
+* **Structured logging**: Configurable log levels with contextual information
 
 ## Architecture (v2.0)
 
@@ -42,8 +45,49 @@ Configure rclone outside of this container and mount its configuration file.
 | `RCL_TARGET` | **Required** | - | Rclone remote name |
 | `RCL_PREFIX` | **Required** | - | Prefix path on rclone target |
 | `RCL_SUFFIX` | Optional | dockervolumes | Suffix path on rclone target |
+| `LOG_LEVEL` | Optional | INFO | Log level (DEBUG, INFO, WARNING, ERROR, CRITICAL) |
+| `ENABLE_HEALTH_SERVER` | Optional | true | Enable health check HTTP server |
+| `HEALTH_PORT` | Optional | 8080 | Port for health check server |
 
 **Final backup path**: `$RCL_TARGET:$RCL_PREFIX/$HOSTID/$RCL_SUFFIX/{volume_name}/`
+
+## Health Checks & Monitoring
+
+The container exposes HTTP endpoints for health monitoring and metrics collection:
+
+### Endpoints
+
+* **`/health`** - Basic health check (returns 200 if healthy, 503 if unhealthy)
+* **`/ready`** - Readiness check for Kubernetes/orchestration (returns 200 when ready)
+* **`/metrics`** - Prometheus-compatible metrics endpoint
+
+### Metrics Exposed
+
+* `backup_total_count` - Total number of backup cycles completed
+* `backup_failure_count` - Total number of backup failures
+* `backup_volumes_success` - Number of volumes successfully backed up in last cycle
+* `backup_volumes_failed` - Number of volumes that failed in last cycle
+* `backup_last_duration_seconds` - Duration of last backup cycle in seconds
+* `backup_last_success_timestamp` - Unix timestamp of last successful backup
+* `backup_uptime_seconds` - Service uptime in seconds
+
+### Docker Compose with Health Checks
+
+```yaml
+version: '3.8'
+services:
+  bkpnsync:
+    image: acaranta/backup_n_sync:latest
+    ports:
+      - "8080:8080"  # Health check port
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    # ... rest of configuration
+```
 
 ## Docker Compose Example
 
