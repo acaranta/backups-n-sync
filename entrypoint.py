@@ -10,6 +10,7 @@ import time
 import logging
 from datetime import datetime, timedelta
 import subprocess
+import signal
 
 # Import health server
 try:
@@ -21,6 +22,10 @@ except ImportError:
         pass
     def update_state(*args, **kwargs):
         pass
+
+# Global flag for graceful shutdown
+shutdown_requested = False
+backup_in_progress = False
 
 
 # Configure logging for Docker-friendly output
@@ -39,6 +44,25 @@ logging.root.handlers[0].setFormatter(
 logging.root.handlers[0].flush = lambda: sys.stdout.flush()
 
 logger = logging.getLogger(__name__)
+
+
+def signal_handler(signum, frame):
+    """Handle shutdown signals gracefully"""
+    global shutdown_requested
+    
+    signal_name = signal.Signals(signum).name
+    
+    if backup_in_progress:
+        log(f"Received {signal_name}, waiting for current backup to complete...", 'warning',
+            signal=signal_name)
+        log("Press Ctrl+C again to force shutdown (may cause data corruption)", 'warning')
+        shutdown_requested = True
+        update_state(status='shutting_down', current_operation='graceful_shutdown')
+    else:
+        log(f"Received {signal_name}, shutting down immediately", 'info',
+            signal=signal_name)
+        update_state(status='stopped')
+        sys.exit(0)
 
 
 def log(message, level='info', **context):
@@ -83,12 +107,15 @@ def get_next_run_time(target_time):
 
 def run_backup():
     """Execute the backup script"""
+    global backup_in_progress, shutdown_requested
+    
     log("=" * 50, 'info')
     log("Starting backup cycle", 'info')
     log("=" * 50, 'info')
     
     # Update state
     update_state(status='running', current_operation='backup_cycle')
+    backup_in_progress = True
 
     start_time = time.time()
 
@@ -117,6 +144,7 @@ def run_backup():
             total_backups=lambda s: s.get('total_backups', 0) + 1
         )
         
+        backup_in_progress = False
         return True
     except subprocess.CalledProcessError as e:
         elapsed = time.time() - start_time
@@ -136,14 +164,30 @@ def run_backup():
             total_failures=lambda s: s.get('total_failures', 0) + 1
         )
         
+        backup_in_progress = False
         return False
+    finally:
+        backup_in_progress = False
+        
+        # Check if shutdown was requested during backup
+        if shutdown_requested:
+            log("Backup completed, proceeding with shutdown", 'info')
+            update_state(status='stopped')
+            sys.exit(0)
 
 
 def main():
     """Main entrypoint logic"""
+    global shutdown_requested
+    
+    # Register signal handlers for graceful shutdown
+    signal.signal(signal.SIGTERM, signal_handler)
+    signal.signal(signal.SIGINT, signal_handler)
+    
     log("=" * 50, 'info')
     log("Backup and Sync - Starting", 'info')
     log("=" * 50, 'info')
+    log("Signal handlers registered for graceful shutdown", 'debug')
     
     # Start health server if enabled
     health_port = int(os.environ.get('HEALTH_PORT', '8080'))
@@ -212,6 +256,12 @@ def main():
 
     # Main loop
     while True:
+        # Check for shutdown request
+        if shutdown_requested:
+            log("Shutdown requested, exiting main loop", 'info')
+            update_state(status='stopped')
+            sys.exit(0)
+        
         next_run = get_next_run_time(wakeup_time)
         now = datetime.now()
         sleep_seconds = (next_run - now).total_seconds()
@@ -219,18 +269,36 @@ def main():
         log(f"Going to sleep for {int(sleep_seconds)}s", 'debug', 
             sleep_seconds=int(sleep_seconds))
 
-        time.sleep(sleep_seconds)
+        # Sleep in smaller intervals to check for shutdown
+        sleep_interval = 60  # Check every minute
+        total_slept = 0
+        while total_slept < sleep_seconds:
+            if shutdown_requested:
+                log("Shutdown requested during sleep, exiting", 'info')
+                update_state(status='stopped')
+                sys.exit(0)
+            
+            interval = min(sleep_interval, sleep_seconds - total_slept)
+            time.sleep(interval)
+            total_slept += interval
 
-        # Run the backup
-        run_backup()
+        # Run the backup if not shutting down
+        if not shutdown_requested:
+            run_backup()
 
 
 if __name__ == '__main__':
     try:
         main()
     except KeyboardInterrupt:
-        log("Received interrupt signal, shutting down", 'info')
+        if backup_in_progress:
+            log("Forced shutdown during backup - data may be corrupted", 'critical')
+            update_state(status='stopped', last_error='Forced shutdown during backup')
+        else:
+            log("Received interrupt signal, shutting down", 'info')
+            update_state(status='stopped')
         sys.exit(0)
     except Exception as e:
         log(f"FATAL ERROR: {e}", 'critical', error=str(e))
+        update_state(status='error', last_error=str(e))
         sys.exit(1)
