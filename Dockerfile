@@ -48,11 +48,11 @@ RUN (getent group 1000 || groupadd -r -g 1000 backup) && \
 # Copy Python application
 COPY --chown=backup:backup pyproject.toml /app/
 COPY --chown=backup:backup backups_n_sync.py /usr/local/bin/
-COPY --chown=backup:backup health_server.py /usr/local/bin/
+COPY --chown=backup:backup health_server.py /
 COPY --chown=backup:backup entrypoint.py /
 
 RUN chmod +x /usr/local/bin/backups_n_sync.py && \
-    chmod +x /usr/local/bin/health_server.py && \
+    chmod +x /health_server.py && \
     chmod +x /entrypoint.py
 
 ENV XDG_CONFIG_HOME=/config
