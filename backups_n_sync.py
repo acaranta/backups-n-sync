@@ -267,23 +267,59 @@ def calculate_sha256(file_path):
         return None
 
 def verify_rclone(local_file, remote_path, rclone_target, max_retries=2):
-    """Run rclone check to verify remote and local backup consistency"""
+    """Verify remote and local backup consistency using MD5 checksums
+
+    Uses rclone md5sum instead of rclone check to avoid write access requirements.
+    """
     try:
-        # rclone check expects directories, so use parent dir and filter
-        local_dir = os.path.dirname(local_file)
-        remote_dir = f"{rclone_target}:{remote_path}"
-        run_command(
-            f"rclone check {local_dir} {remote_dir} --one-way --match '.*{os.path.basename(local_file)}'",
+        filename = os.path.basename(local_file)
+        remote_file = f"{rclone_target}:{remote_path}/{filename}"
+
+        # Get MD5 from remote file
+        remote_md5_output = run_command(
+            f"rclone md5sum {remote_file}",
+            capture_output=True,
             retries=max_retries,
             retry_delay=2
         )
-        log("rclone check passed", 'info', file=local_file, remote=remote_dir)
-        return True
+
+        # Parse remote MD5 (format: "hash  filename")
+        if not remote_md5_output:
+            log("Could not get remote MD5 checksum", 'error', file=local_file)
+            return False
+
+        remote_md5 = remote_md5_output.split()[0] if remote_md5_output else None
+
+        if not remote_md5:
+            log("Failed to parse remote MD5 checksum", 'error', file=local_file)
+            return False
+
+        # Calculate local MD5
+        local_md5 = hashlib.md5()
+        try:
+            with open(local_file, 'rb') as f:
+                for chunk in iter(lambda: f.read(8192), b''):
+                    local_md5.update(chunk)
+            local_md5_hex = local_md5.hexdigest()
+        except Exception as e:
+            log(f"Failed to calculate local MD5: {e}", 'error', file=local_file)
+            return False
+
+        # Compare checksums
+        if local_md5_hex == remote_md5:
+            log("rclone verification passed (MD5 match)", 'info',
+                file=local_file, remote=remote_file, md5=local_md5_hex)
+            return True
+        else:
+            log("rclone verification failed (MD5 mismatch)", 'error',
+                file=local_file, local_md5=local_md5_hex, remote_md5=remote_md5)
+            return False
+
     except subprocess.CalledProcessError as e:
-        log(f"rclone check failed: {e}", 'error', file=local_file, remote=remote_dir)
+        log(f"rclone verification failed: {e}", 'error', file=local_file, remote=remote_file)
         return False
     except Exception as e:
-        log(f"Unexpected error in rclone check: {e}", 'error', file=local_file, remote=remote_dir)
+        log(f"Unexpected error in rclone verification: {e}", 'error', file=local_file)
         return False
 
 def test_restore(backup_file):
