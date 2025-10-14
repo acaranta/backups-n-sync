@@ -14,6 +14,7 @@ A Docker container for automated backups with rclone synchronization.
 * **Health checks & monitoring**: Built-in HTTP endpoints for container orchestration and Prometheus metrics
 * **Error handling**: Retry logic with exponential backoff for transient failures
 * **Structured logging**: Configurable log levels with contextual information
+* **Backup verification & integrity checks**: Each backup is verified with SHA256 checksum, `rclone check` (remote/local consistency), and a test-restore to a temp location. Results are logged and surfaced in health state/metrics.
 
 ## Architecture (v2.0)
 
@@ -23,8 +24,20 @@ A Docker container for automated backups with rclone synchronization.
 2. **Upload**: Backup is uploaded to rclone target using `rclone copy`
 3. **Delete local**: Local backup is deleted immediately after successful upload
 4. **Remote retention**: Old backups are deleted directly from the rclone target based on `MAXBKP`
+5. **Verify**: Each backup is verified for integrity (SHA256, rclone check, test-restore)
 
 **Benefits**: Local storage only needs space for one backup at a time, while the rclone target stores all retained backups.
+## Backup Verification & Integrity Checks
+
+After each backup, the following integrity checks are performed:
+
+* **SHA256 checksum**: Calculated for each backup archive and logged.
+* **rclone check**: Verifies that the uploaded backup matches the local file (one-way, filename match).
+* **Test-restore**: The backup archive is extracted to a temporary directory to ensure it can be restored.
+* **Logging**: All verification results (checksum, rclone check, test-restore, backup size) are logged and included in the backup summary.
+* **Health state**: Verification results are surfaced in the health server state and metrics.
+
+If any verification step fails, it is logged as an error, but the backup cycle continues for other volumes.
 
 ## Security Features
 

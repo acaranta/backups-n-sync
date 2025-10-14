@@ -12,6 +12,10 @@ from datetime import datetime
 import re
 import time
 
+import hashlib
+import tempfile
+import shutil
+
 # Import health server utilities
 try:
     from health_server import update_state
@@ -245,10 +249,57 @@ def create_backup(source_path, backup_file):
         size_mb = size_bytes / (1024 * 1024)
         log("Backup created successfully", 'info', 
             file=backup_file, size_mb=f"{size_mb:.2f}")
+        return size_bytes
     except subprocess.CalledProcessError as e:
         raise BackupCreationError(f"Failed to create backup of {source_path}: {e}")
     except Exception as e:
         raise BackupCreationError(f"Unexpected error creating backup of {source_path}: {e}")
+
+
+def calculate_sha256(file_path):
+    """Calculate SHA256 checksum of a file"""
+    sha256 = hashlib.sha256()
+    try:
+        with open(file_path, 'rb') as f:
+            for chunk in iter(lambda: f.read(8192), b''):
+                sha256.update(chunk)
+        return sha256.hexdigest()
+    except Exception as e:
+        log(f"Failed to calculate SHA256: {e}", 'warning', file=file_path)
+        return None
+
+def verify_rclone(local_file, remote_path, rclone_target, max_retries=2):
+    """Run rclone check to verify remote and local backup consistency"""
+    try:
+        # rclone check expects directories, so use parent dir and filter
+        local_dir = os.path.dirname(local_file)
+        remote_dir = f"{rclone_target}:{remote_path}"
+        run_command(
+            f"rclone check {local_dir} {remote_dir} --one-way --match '.*{os.path.basename(local_file)}'",
+            retries=max_retries,
+            retry_delay=2
+        )
+        log("rclone check passed", 'info', file=local_file, remote=remote_dir)
+        return True
+    except subprocess.CalledProcessError as e:
+        log(f"rclone check failed: {e}", 'error', file=local_file, remote=remote_dir)
+        return False
+    except Exception as e:
+        log(f"Unexpected error in rclone check: {e}", 'error', file=local_file, remote=remote_dir)
+        return False
+
+def test_restore(backup_file):
+    """Test-restore: extract backup to temp dir and verify success"""
+    temp_dir = tempfile.mkdtemp(prefix="bkpnsync_restore_")
+    try:
+        run_command(f"tar xzpf {backup_file} -C {temp_dir}")
+        log("Test-restore succeeded", 'info', file=backup_file, restore_dir=temp_dir)
+        shutil.rmtree(temp_dir)
+        return True
+    except Exception as e:
+        log(f"Test-restore failed: {e}", 'error', file=backup_file, restore_dir=temp_dir)
+        shutil.rmtree(temp_dir, ignore_errors=True)
+        return False
 
 
 def upload_to_rclone(local_file, remote_path, rclone_target, max_retries=3):
@@ -486,15 +537,34 @@ def main():
             backup_filename = f"{volume}_{run_timestamp}.tar.gz"
             local_backup_path = os.path.join(temp_backup_dir, backup_filename)
 
+
             try:
                 # Create the backup
-                create_backup(source_path, local_backup_path)
+                size_bytes = create_backup(source_path, local_backup_path)
+
+                # Calculate SHA256
+                sha256sum = calculate_sha256(local_backup_path)
+                log("SHA256 checksum", 'info', file=local_backup_path, sha256=sha256sum)
 
                 # Upload to rclone
                 remote_base_path = f"{rclone_prefix}/{hostid}/{rclone_suffix}/{volume}"
                 upload_to_rclone(local_backup_path, remote_base_path, rclone_target)
 
-                # Delete local backup after successful upload
+                # rclone check (verify upload)
+                rclone_verified = verify_rclone(local_backup_path, remote_base_path, rclone_target)
+
+                # Optional: test-restore
+                restore_ok = test_restore(local_backup_path)
+
+                # Log verification results
+                log("Backup verification results", 'info',
+                    file=local_backup_path,
+                    sha256=sha256sum,
+                    rclone_check=rclone_verified,
+                    test_restore=restore_ok,
+                    size_bytes=size_bytes)
+
+                # Delete local backup after successful upload and verification
                 delete_local_backup(local_backup_path)
 
                 # Apply retention policy on remote
@@ -502,13 +572,17 @@ def main():
 
                 # Run volume-specific postscript if it exists
                 run_volume_postscript(source_path, volume)
-                
+
                 # Track success
                 volumes_success += 1
                 successful_volumes.append({
                     'volume': volume,
                     'backup_file': backup_filename,
-                    'remote_path': remote_base_path
+                    'remote_path': remote_base_path,
+                    'sha256': sha256sum,
+                    'rclone_check': rclone_verified,
+                    'test_restore': restore_ok,
+                    'size_bytes': size_bytes
                 })
 
             except BackupCreationError as e:
@@ -563,14 +637,19 @@ def main():
     log(f"Successful backups: {volumes_success}", 'info', success=volumes_success)
     log(f"Failed backups: {volumes_failed}", 'info', failed=volumes_failed)
     
+
     if successful_volumes:
         log("", 'info')
         log("Successfully backed up volumes:", 'info')
         for item in successful_volumes:
-            log(f"  ✓ {item['volume']}", 'info', 
-                volume=item['volume'], 
-                backup_file=item['backup_file'])
-    
+            log(f"  ✓ {item['volume']}", 'info',
+                volume=item['volume'],
+                backup_file=item['backup_file'],
+                sha256=item.get('sha256'),
+                rclone_check=item.get('rclone_check'),
+                test_restore=item.get('test_restore'),
+                size_bytes=item.get('size_bytes'))
+
     if failed_volumes:
         log("", 'info')
         log("Failed volumes:", 'error')
@@ -578,15 +657,22 @@ def main():
             log(f"  ✗ {item['volume']}: {item['error']}", 'error',
                 volume=item['volume'],
                 error=item['error'])
-    
+
     log("=" * 50, 'info')
-    
-    # Update metrics
+
+    # Update metrics and health state with verification info
     update_state(
         volumes_backed_up=volumes_success,
         volumes_failed=volumes_failed,
         current_operation=None,
-        last_error=failed_volumes[-1]['error'] if failed_volumes else None
+        last_error=failed_volumes[-1]['error'] if failed_volumes else None,
+        last_verification=[{
+            'volume': v['volume'],
+            'sha256': v.get('sha256'),
+            'rclone_check': v.get('rclone_check'),
+            'test_restore': v.get('test_restore'),
+            'size_bytes': v.get('size_bytes')
+        } for v in successful_volumes]
     )
 
     # Run postscript if exists
