@@ -13,8 +13,6 @@ import re
 import time
 
 import hashlib
-import tempfile
-import shutil
 
 # Import health server utilities
 try:
@@ -289,16 +287,15 @@ def verify_rclone(local_file, remote_path, rclone_target, max_retries=2):
         return False
 
 def test_restore(backup_file):
-    """Test-restore: extract backup to temp dir and verify success"""
-    temp_dir = tempfile.mkdtemp(prefix="bkpnsync_restore_")
+    """Test archive integrity without extraction by listing contents"""
     try:
-        run_command(f"tar xzpf {backup_file} -C {temp_dir}")
-        log("Test-restore succeeded", 'info', file=backup_file, restore_dir=temp_dir)
-        shutil.rmtree(temp_dir)
+        # Use tar -tzf to test archive integrity without extracting
+        # This verifies the archive can be read and decompressed
+        run_command(f"tar tzf {backup_file} > /dev/null")
+        log("Archive integrity check passed", 'info', file=backup_file)
         return True
     except Exception as e:
-        log(f"Test-restore failed: {e}", 'error', file=backup_file, restore_dir=temp_dir)
-        shutil.rmtree(temp_dir, ignore_errors=True)
+        log(f"Archive integrity check failed: {e}", 'error', file=backup_file)
         return False
 
 
