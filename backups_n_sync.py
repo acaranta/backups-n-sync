@@ -18,9 +18,11 @@ import hashlib
 try:
     from health_server import update_state
     HEALTH_SERVER_AVAILABLE = True
-except ImportError:
+except ImportError as e:
     HEALTH_SERVER_AVAILABLE = False
+    print(f"WARNING: Could not import health_server: {e}")
     def update_state(*args, **kwargs):
+        print(f"DEBUG: update_state called but health_server not available: {kwargs}")
         pass
 
 
@@ -485,6 +487,7 @@ def main():
     rclone_suffix = os.environ.get('RCL_SUFFIX', 'dockervolumes')
     sync_only = os.environ.get('SYNCONLY', '')
 
+    log(f"Health server integration: {'enabled' if HEALTH_SERVER_AVAILABLE else 'disabled'}", 'info')
     log(f"Host ID: {hostid}", 'info', hostid=hostid)
     log(f"Max backups to keep: {max_backups}", 'info', max_backups=max_backups)
     log(f"Base dir for volumes: {src_vol_base}", 'info', base_dir=src_vol_base)
