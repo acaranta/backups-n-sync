@@ -115,64 +115,67 @@ class HealthHandler(BaseHTTPRequestHandler):
     def handle_metrics(self):
         """Metrics endpoint with Prometheus-compatible format"""
         state = get_state()
-        
+
+        # Get hostid from environment
+        hostid = os.environ.get('HOSTID', os.uname().nodename)
+
         # Calculate uptime
         start_time = state.get('start_time')
         if start_time:
             uptime_seconds = (datetime.now() - datetime.fromisoformat(start_time)).total_seconds()
         else:
             uptime_seconds = 0
-        
-        # Prometheus-style metrics
+
+        # Prometheus-style metrics with backuphost label
         metrics = []
         metrics.append('# HELP backup_total_count Total number of backup cycles completed')
         metrics.append('# TYPE backup_total_count counter')
-        metrics.append(f'backup_total_count {state.get("total_backups", 0)}')
+        metrics.append(f'backup_total_count{{backuphost="{hostid}"}} {state.get("total_backups", 0)}')
         metrics.append('')
-        
+
         metrics.append('# HELP backup_failure_count Total number of backup failures')
         metrics.append('# TYPE backup_failure_count counter')
-        metrics.append(f'backup_failure_count {state.get("total_failures", 0)}')
+        metrics.append(f'backup_failure_count{{backuphost="{hostid}"}} {state.get("total_failures", 0)}')
         metrics.append('')
-        
+
         metrics.append('# HELP backup_volumes_success Number of volumes successfully backed up in last cycle')
         metrics.append('# TYPE backup_volumes_success gauge')
-        metrics.append(f'backup_volumes_success {state.get("volumes_backed_up", 0)}')
+        metrics.append(f'backup_volumes_success{{backuphost="{hostid}"}} {state.get("volumes_backed_up", 0)}')
         metrics.append('')
-        
+
         metrics.append('# HELP backup_volumes_failed Number of volumes that failed in last cycle')
         metrics.append('# TYPE backup_volumes_failed gauge')
-        metrics.append(f'backup_volumes_failed {state.get("volumes_failed", 0)}')
+        metrics.append(f'backup_volumes_failed{{backuphost="{hostid}"}} {state.get("volumes_failed", 0)}')
         metrics.append('')
-        
+
         metrics.append('# HELP backup_last_duration_seconds Duration of last backup cycle in seconds')
         metrics.append('# TYPE backup_last_duration_seconds gauge')
-        metrics.append(f'backup_last_duration_seconds {state.get("last_duration", 0)}')
+        metrics.append(f'backup_last_duration_seconds{{backuphost="{hostid}"}} {state.get("last_duration", 0)}')
         metrics.append('')
-        
+
         metrics.append('# HELP backup_last_success_timestamp Unix timestamp of last successful backup')
         metrics.append('# TYPE backup_last_success_timestamp gauge')
         last_success = state.get('last_backup_time')
         if last_success:
             try:
                 timestamp = datetime.fromisoformat(last_success).timestamp()
-                metrics.append(f'backup_last_success_timestamp {timestamp}')
+                metrics.append(f'backup_last_success_timestamp{{backuphost="{hostid}"}} {timestamp}')
             except Exception:
-                metrics.append('backup_last_success_timestamp 0')
+                metrics.append(f'backup_last_success_timestamp{{backuphost="{hostid}"}} 0')
         else:
-            metrics.append('backup_last_success_timestamp 0')
+            metrics.append(f'backup_last_success_timestamp{{backuphost="{hostid}"}} 0')
         metrics.append('')
-        
+
         metrics.append('# HELP backup_uptime_seconds Service uptime in seconds')
         metrics.append('# TYPE backup_uptime_seconds gauge')
-        metrics.append(f'backup_uptime_seconds {uptime_seconds}')
+        metrics.append(f'backup_uptime_seconds{{backuphost="{hostid}"}} {uptime_seconds}')
         metrics.append('')
 
         # Total size of last backup cycle
         metrics.append('# HELP backup_last_total_size Total size of last backup cycle in megabytes')
         metrics.append('# TYPE backup_last_total_size gauge')
         last_total_size_mb = state.get('last_total_size_mb', 0)
-        metrics.append(f'backup_last_total_size {last_total_size_mb}')
+        metrics.append(f'backup_last_total_size{{backuphost="{hostid}"}} {last_total_size_mb}')
         metrics.append('')
 
         # Per-volume metrics with labels
@@ -183,14 +186,21 @@ class HealthHandler(BaseHTTPRequestHandler):
             metrics.append('# TYPE backup_volume_size gauge')
             for volume, info in volume_states.items():
                 size_mb = info.get('size_mb', 0)
-                metrics.append(f'backup_volume_size{{volume="{volume}"}} {size_mb}')
+                metrics.append(f'backup_volume_size{{backuphost="{hostid}",volume="{volume}"}} {size_mb}')
             metrics.append('')
 
             metrics.append('# HELP backup_volume_state Volume backup state (0=success, 1=failed, 2=skipped)')
             metrics.append('# TYPE backup_volume_state gauge')
             for volume, info in volume_states.items():
                 state_value = info.get('state', 2)  # Default to skipped
-                metrics.append(f'backup_volume_state{{volume="{volume}"}} {state_value}')
+                metrics.append(f'backup_volume_state{{backuphost="{hostid}",volume="{volume}"}} {state_value}')
+            metrics.append('')
+
+            metrics.append('# HELP backup_volume_duration Duration of volume backup in seconds')
+            metrics.append('# TYPE backup_volume_duration gauge')
+            for volume, info in volume_states.items():
+                duration = info.get('duration_seconds', 0)
+                metrics.append(f'backup_volume_duration{{backuphost="{hostid}",volume="{volume}"}} {duration}')
             metrics.append('')
 
         # Send response

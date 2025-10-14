@@ -532,7 +532,10 @@ def main():
         # Process each volume
         for volume in volumes:
             log("----------------------------------", 'info')
-            
+
+            # Start timing for this volume
+            volume_start_time = time.time()
+
             # Update current operation
             update_state(current_operation=f"backing_up_{volume}")
 
@@ -542,13 +545,18 @@ def main():
                 log("Volume/dir does not exist ... Skipping", 'warning',
                     path=source_path, volume=volume)
                 volumes_failed += 1
+                volume_duration = time.time() - volume_start_time
                 failed_volumes.append({
                     'volume': volume,
                     'error': 'Directory does not exist',
                     'path': source_path
                 })
                 # Track volume state as skipped
-                volume_states[volume] = {'state': 2, 'size_mb': 0}
+                volume_states[volume] = {
+                    'state': 2,
+                    'size_mb': 0,
+                    'duration_seconds': round(volume_duration, 2)
+                }
                 # Update metrics immediately after failure
                 update_state(
                     volumes_backed_up=volumes_success,
@@ -563,13 +571,18 @@ def main():
             if not run_volume_prescript(source_path, volume):
                 # Prescript failed, skip this volume
                 volumes_failed += 1
+                volume_duration = time.time() - volume_start_time
                 failed_volumes.append({
                     'volume': volume,
                     'error': 'Volume prescript failed',
                     'path': source_path
                 })
                 # Track volume state as skipped
-                volume_states[volume] = {'state': 2, 'size_mb': 0}
+                volume_states[volume] = {
+                    'state': 2,
+                    'size_mb': 0,
+                    'duration_seconds': round(volume_duration, 2)
+                }
                 # Update metrics immediately after failure
                 update_state(
                     volumes_backed_up=volumes_success,
@@ -621,6 +634,7 @@ def main():
 
                 # Track success
                 volumes_success += 1
+                volume_duration = time.time() - volume_start_time
                 size_mb = size_bytes / (1024 * 1024)
                 total_size_bytes += size_bytes
                 successful_volumes.append({
@@ -633,8 +647,12 @@ def main():
                     'size_bytes': size_bytes
                 })
 
-                # Track volume state as success with size
-                volume_states[volume] = {'state': 0, 'size_mb': round(size_mb, 2)}
+                # Track volume state as success with size and duration
+                volume_states[volume] = {
+                    'state': 0,
+                    'size_mb': round(size_mb, 2),
+                    'duration_seconds': round(volume_duration, 2)
+                }
 
                 # Update metrics immediately after each successful volume
                 update_state(
@@ -648,13 +666,18 @@ def main():
                 error_msg = str(e)
                 log(f"Failed to create backup: {e}", 'error', volume=volume)
                 volumes_failed += 1
+                volume_duration = time.time() - volume_start_time
                 failed_volumes.append({
                     'volume': volume,
                     'error': f'Backup creation failed: {error_msg}',
                     'path': source_path
                 })
                 # Track volume state as failed
-                volume_states[volume] = {'state': 1, 'size_mb': 0}
+                volume_states[volume] = {
+                    'state': 1,
+                    'size_mb': 0,
+                    'duration_seconds': round(volume_duration, 2)
+                }
                 # Update metrics immediately after failure
                 update_state(
                     volumes_backed_up=volumes_success,
@@ -669,13 +692,18 @@ def main():
                 error_msg = str(e)
                 log(f"Failed to upload backup: {e}", 'error', volume=volume)
                 volumes_failed += 1
+                volume_duration = time.time() - volume_start_time
                 failed_volumes.append({
                     'volume': volume,
                     'error': f'Upload failed: {error_msg}',
                     'path': source_path
                 })
                 # Track volume state as failed
-                volume_states[volume] = {'state': 1, 'size_mb': 0}
+                volume_states[volume] = {
+                    'state': 1,
+                    'size_mb': 0,
+                    'duration_seconds': round(volume_duration, 2)
+                }
                 # Update metrics immediately after failure
                 update_state(
                     volumes_backed_up=volumes_success,
@@ -690,13 +718,18 @@ def main():
                 error_msg = str(e)
                 log(f"Unexpected error backing up volume: {e}", 'error', volume=volume)
                 volumes_failed += 1
+                volume_duration = time.time() - volume_start_time
                 failed_volumes.append({
                     'volume': volume,
                     'error': f'Unexpected error: {error_msg}',
                     'path': source_path
                 })
                 # Track volume state as failed
-                volume_states[volume] = {'state': 1, 'size_mb': 0}
+                volume_states[volume] = {
+                    'state': 1,
+                    'size_mb': 0,
+                    'duration_seconds': round(volume_duration, 2)
+                }
                 # Update metrics immediately after failure
                 update_state(
                     volumes_backed_up=volumes_success,
