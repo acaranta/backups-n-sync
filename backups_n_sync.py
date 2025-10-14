@@ -537,7 +537,7 @@ def main():
             source_path = os.path.join(src_vol_base, volume)
 
             if not os.path.isdir(source_path):
-                log("Volume/dir does not exist ... Skipping", 'warning', 
+                log("Volume/dir does not exist ... Skipping", 'warning',
                     path=source_path, volume=volume)
                 volumes_failed += 1
                 failed_volumes.append({
@@ -545,6 +545,11 @@ def main():
                     'error': 'Directory does not exist',
                     'path': source_path
                 })
+                # Update metrics immediately after failure
+                update_state(
+                    volumes_backed_up=volumes_success,
+                    volumes_failed=volumes_failed
+                )
                 continue
 
             log("Directory exists", 'debug', path=source_path, volume=volume)
@@ -558,6 +563,11 @@ def main():
                     'error': 'Volume prescript failed',
                     'path': source_path
                 })
+                # Update metrics immediately after failure
+                update_state(
+                    volumes_backed_up=volumes_success,
+                    volumes_failed=volumes_failed
+                )
                 continue
 
             # Create temporary local backup
@@ -613,6 +623,12 @@ def main():
                     'size_bytes': size_bytes
                 })
 
+                # Update metrics immediately after each successful volume
+                update_state(
+                    volumes_backed_up=volumes_success,
+                    volumes_failed=volumes_failed
+                )
+
             except BackupCreationError as e:
                 error_msg = str(e)
                 log(f"Failed to create backup: {e}", 'error', volume=volume)
@@ -622,6 +638,11 @@ def main():
                     'error': f'Backup creation failed: {error_msg}',
                     'path': source_path
                 })
+                # Update metrics immediately after failure
+                update_state(
+                    volumes_backed_up=volumes_success,
+                    volumes_failed=volumes_failed
+                )
                 # Clean up local file if it exists
                 if os.path.exists(local_backup_path):
                     delete_local_backup(local_backup_path)
@@ -635,6 +656,11 @@ def main():
                     'error': f'Upload failed: {error_msg}',
                     'path': source_path
                 })
+                # Update metrics immediately after failure
+                update_state(
+                    volumes_backed_up=volumes_success,
+                    volumes_failed=volumes_failed
+                )
                 # Clean up local file if it exists
                 if os.path.exists(local_backup_path):
                     delete_local_backup(local_backup_path)
@@ -648,6 +674,11 @@ def main():
                     'error': f'Unexpected error: {error_msg}',
                     'path': source_path
                 })
+                # Update metrics immediately after failure
+                update_state(
+                    volumes_backed_up=volumes_success,
+                    volumes_failed=volumes_failed
+                )
                 # Clean up local file if it exists
                 if os.path.exists(local_backup_path):
                     delete_local_backup(local_backup_path)
