@@ -10,7 +10,7 @@ RUN apk add --no-cache curl unzip && \
     rm -rf rclone-*
 
 # Stage 2: Final minimal image
-FROM ubuntu:noble-20241011
+FROM ubuntu:noble
 ENV DEBIAN_FRONTEND="noninteractive"
 
 # Install minimal dependencies and clean up in single layer to reduce size
