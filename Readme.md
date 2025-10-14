@@ -14,7 +14,7 @@ A Docker container for automated backups with rclone synchronization.
 * **Health checks & monitoring**: Built-in HTTP endpoints for container orchestration and Prometheus metrics
 * **Error handling**: Retry logic with exponential backoff for transient failures
 * **Structured logging**: Configurable log levels with contextual information
-* **Backup verification & integrity checks**: Each backup is verified with SHA256 checksum, MD5 checksum comparison (remote/local consistency), and archive integrity test (without extraction). Results are logged and surfaced in health state/metrics.
+* **Backup verification & integrity checks**: Each backup is verified with SHA256 checksum, file size verification (remote/local consistency), and archive integrity test (without extraction). Results are logged and surfaced in health state/metrics.
 
 ## Architecture (v2.0)
 
@@ -24,7 +24,7 @@ A Docker container for automated backups with rclone synchronization.
 2. **Upload**: Backup is uploaded to rclone target using `rclone copy`
 3. **Delete local**: Local backup is deleted immediately after successful upload
 4. **Remote retention**: Old backups are deleted directly from the rclone target based on `MAXBKP`
-5. **Verify**: Each backup is verified for integrity (SHA256, MD5 checksum comparison, archive integrity test)
+5. **Verify**: Each backup is verified for integrity (SHA256, file size verification, archive integrity test)
 
 **Benefits**: Local storage only needs space for one backup at a time, while the rclone target stores all retained backups.
 ## Backup Verification & Integrity Checks
@@ -32,9 +32,9 @@ A Docker container for automated backups with rclone synchronization.
 After each backup, the following integrity checks are performed:
 
 * **SHA256 checksum**: Calculated for each backup archive and logged.
-* **MD5 checksum verification**: Compares MD5 checksum of the uploaded file on the remote with the local file using `rclone md5sum`. This avoids the read-only filesystem issues that `rclone check` can have.
+* **File size verification**: Compares the size of the uploaded file on the remote with the local file using `rclone lsl`. This works with all cloud storage providers and avoids the read-only filesystem issues that `rclone check` can have.
 * **Archive integrity test**: The backup archive is tested using `tar -tzf` to verify it can be read and decompressed without actually extracting data (lightweight, fast, minimal storage overhead).
-* **Logging**: All verification results (checksum, MD5 verification, archive integrity, backup size) are logged and included in the backup summary.
+* **Logging**: All verification results (checksum, size verification, archive integrity, backup size) are logged and included in the backup summary.
 * **Health state**: Verification results are surfaced in the health server state and metrics.
 
 If any verification step fails, it is logged as an error, but the backup cycle continues for other volumes.

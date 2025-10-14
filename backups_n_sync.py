@@ -267,52 +267,47 @@ def calculate_sha256(file_path):
         return None
 
 def verify_rclone(local_file, remote_path, rclone_target, max_retries=2):
-    """Verify remote and local backup consistency using MD5 checksums
+    """Verify remote and local backup consistency using file size comparison
 
-    Uses rclone md5sum instead of rclone check to avoid write access requirements.
+    Uses rclone size to verify file was uploaded correctly. This works with all
+    remote types and doesn't require write access or hash support.
     """
     try:
         filename = os.path.basename(local_file)
         remote_file = f"{rclone_target}:{remote_path}/{filename}"
 
-        # Get MD5 from remote file
-        remote_md5_output = run_command(
-            f"rclone md5sum {remote_file}",
+        # Get local file size
+        local_size = os.path.getsize(local_file)
+
+        # Get remote file info using rclone lsl (list with size)
+        # Format: "size  date time filename"
+        remote_info_output = run_command(
+            f"rclone lsl {remote_file}",
             capture_output=True,
             retries=max_retries,
             retry_delay=2
         )
 
-        # Parse remote MD5 (format: "hash  filename")
-        if not remote_md5_output:
-            log("Could not get remote MD5 checksum", 'error', file=local_file)
+        if not remote_info_output:
+            log("Could not get remote file info", 'error', file=local_file)
             return False
 
-        remote_md5 = remote_md5_output.split()[0] if remote_md5_output else None
-
-        if not remote_md5:
-            log("Failed to parse remote MD5 checksum", 'error', file=local_file)
-            return False
-
-        # Calculate local MD5
-        local_md5 = hashlib.md5()
+        # Parse remote size (first field in output)
         try:
-            with open(local_file, 'rb') as f:
-                for chunk in iter(lambda: f.read(8192), b''):
-                    local_md5.update(chunk)
-            local_md5_hex = local_md5.hexdigest()
-        except Exception as e:
-            log(f"Failed to calculate local MD5: {e}", 'error', file=local_file)
+            remote_size = int(remote_info_output.split()[0])
+        except (ValueError, IndexError) as e:
+            log(f"Failed to parse remote file size: {e}", 'error',
+                file=local_file, output=remote_info_output)
             return False
 
-        # Compare checksums
-        if local_md5_hex == remote_md5:
-            log("rclone verification passed (MD5 match)", 'info',
-                file=local_file, remote=remote_file, md5=local_md5_hex)
+        # Compare sizes
+        if local_size == remote_size:
+            log("rclone verification passed (size match)", 'info',
+                file=local_file, remote=remote_file, size_bytes=local_size)
             return True
         else:
-            log("rclone verification failed (MD5 mismatch)", 'error',
-                file=local_file, local_md5=local_md5_hex, remote_md5=remote_md5)
+            log("rclone verification failed (size mismatch)", 'error',
+                file=local_file, local_size=local_size, remote_size=remote_size)
             return False
 
     except subprocess.CalledProcessError as e:
