@@ -40,17 +40,14 @@ ENV PATH="/root/.local/bin:${PATH}"
 # Copy rclone binary from downloader stage
 COPY --from=rclone-downloader /usr/local/bin/rclone /usr/local/bin/rclone
 
-# Create non-root user for running the application
-RUN (getent group 1000 || groupadd -r -g 1000 backup) && \
-    (getent passwd 1000 || useradd -r -u 1000 -g backup -m -d /home/backup -s /bin/bash backup) && \
-    mkdir -p /data /backups /config /tmp && \
-    chown -R backup:backup /data /backups /config /tmp
+# Create required directories
+RUN mkdir -p /data /backups /config /tmp
 
 # Copy Python application
-COPY --chown=backup:backup pyproject.toml /app/
-COPY --chown=backup:backup backups_n_sync.py /usr/local/bin/
-COPY --chown=backup:backup health_server.py /
-COPY --chown=backup:backup entrypoint.py /
+COPY pyproject.toml /app/
+COPY backups_n_sync.py /usr/local/bin/
+COPY health_server.py /
+COPY entrypoint.py /
 
 RUN chmod +x /usr/local/bin/backups_n_sync.py && \
     chmod +x /health_server.py && \
@@ -74,14 +71,11 @@ ENV LOG_LEVEL="INFO"
 ENV ENABLE_HEALTH_SERVER="true"
 ENV HEALTH_PORT="8080"
 
-# Switch to non-root user
-USER backup
-
 WORKDIR /data
 
 EXPOSE 8080
 
-# Use specific user and set labels for better image metadata
+# Set labels for better image metadata
 LABEL maintainer="acaranta" \
       version="2.0" \
       description="Docker container for automated backups with rclone synchronization" \
