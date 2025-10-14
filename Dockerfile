@@ -26,6 +26,7 @@ RUN echo "tzdata tzdata/Areas select Europe" | debconf-set-selections && \
     python3 \
     python3-pip \
     curl \
+    jq \
     && \
   echo "user_allow_other" >> /etc/fuse.conf && \
   apt-get clean && \
