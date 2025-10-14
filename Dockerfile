@@ -40,8 +40,8 @@ ENV PATH="/root/.local/bin:${PATH}"
 COPY --from=rclone-downloader /usr/local/bin/rclone /usr/local/bin/rclone
 
 # Create non-root user for running the application
-RUN groupadd -r -g 1000 backup && \
-    useradd -r -u 1000 -g backup -m -d /home/backup -s /bin/bash backup && \
+RUN (getent group 1000 || groupadd -r -g 1000 backup) && \
+    (getent passwd 1000 || useradd -r -u 1000 -g backup -m -d /home/backup -s /bin/bash backup) && \
     mkdir -p /data /backups /config /tmp && \
     chown -R backup:backup /data /backups /config /tmp
 
