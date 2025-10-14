@@ -8,6 +8,7 @@ import os
 import json
 import logging
 import threading
+import socket
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from datetime import datetime
 
@@ -217,16 +218,42 @@ class HealthHandler(BaseHTTPRequestHandler):
         self.wfile.write(json.dumps(data, indent=2).encode())
 
 
+class DualStackHTTPServer(HTTPServer):
+    """HTTPServer that listens on both IPv4 and IPv6"""
+
+    address_family = socket.AF_INET6
+
+    def __init__(self, server_address, RequestHandlerClass, bind_and_activate=True):
+        """Initialize dual-stack server"""
+        super().__init__(server_address, RequestHandlerClass, bind_and_activate=False)
+
+        # Enable dual-stack (IPv4 and IPv6) on the socket
+        # Setting IPV6_V6ONLY to 0 allows the socket to accept both IPv4 and IPv6 connections
+        self.socket.setsockopt(socket.IPPROTO_IPV6, socket.IPV6_V6ONLY, 0)
+
+        if bind_and_activate:
+            try:
+                self.server_bind()
+                self.server_activate()
+            except:
+                self.server_close()
+                raise
+
+
 def start_health_server(port=8080):
-    """Start the health check HTTP server in a background thread"""
+    """Start the health check HTTP server in a background thread
+
+    Listens on both IPv4 and IPv6 using dual-stack socket.
+    """
     def run_server():
         try:
-            server = HTTPServer(('0.0.0.0', port), HealthHandler)
-            logger.info(f"Health server started on port {port}")
+            # Use '::' to bind to all IPv6 addresses (and IPv4 via dual-stack)
+            server = DualStackHTTPServer(('::', port), HealthHandler)
+            logger.info(f"Health server started on port {port} (IPv4 and IPv6)")
             server.serve_forever()
         except Exception as e:
             logger.error(f"Health server error: {e}")
-    
+
     thread = threading.Thread(target=run_server, daemon=True)
     thread.start()
     logger.info(f"Health server thread started on port {port}")
