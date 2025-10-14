@@ -494,6 +494,8 @@ def main():
     volumes_failed = 0
     failed_volumes = []  # Track which volumes failed and why
     successful_volumes = []  # Track successful backups
+    volume_states = {}  # Track per-volume state and size for metrics
+    total_size_bytes = 0  # Track total backup size
 
     # Check rclone config
     if not os.path.exists('/config/rclone/rclone.conf'):
@@ -545,10 +547,13 @@ def main():
                     'error': 'Directory does not exist',
                     'path': source_path
                 })
+                # Track volume state as skipped
+                volume_states[volume] = {'state': 2, 'size_mb': 0}
                 # Update metrics immediately after failure
                 update_state(
                     volumes_backed_up=volumes_success,
-                    volumes_failed=volumes_failed
+                    volumes_failed=volumes_failed,
+                    volume_states=volume_states
                 )
                 continue
 
@@ -563,10 +568,13 @@ def main():
                     'error': 'Volume prescript failed',
                     'path': source_path
                 })
+                # Track volume state as skipped
+                volume_states[volume] = {'state': 2, 'size_mb': 0}
                 # Update metrics immediately after failure
                 update_state(
                     volumes_backed_up=volumes_success,
-                    volumes_failed=volumes_failed
+                    volumes_failed=volumes_failed,
+                    volume_states=volume_states
                 )
                 continue
 
@@ -613,6 +621,8 @@ def main():
 
                 # Track success
                 volumes_success += 1
+                size_mb = size_bytes / (1024 * 1024)
+                total_size_bytes += size_bytes
                 successful_volumes.append({
                     'volume': volume,
                     'backup_file': backup_filename,
@@ -623,10 +633,15 @@ def main():
                     'size_bytes': size_bytes
                 })
 
+                # Track volume state as success with size
+                volume_states[volume] = {'state': 0, 'size_mb': round(size_mb, 2)}
+
                 # Update metrics immediately after each successful volume
                 update_state(
                     volumes_backed_up=volumes_success,
-                    volumes_failed=volumes_failed
+                    volumes_failed=volumes_failed,
+                    volume_states=volume_states,
+                    last_total_size_mb=round(total_size_bytes / (1024 * 1024), 2)
                 )
 
             except BackupCreationError as e:
@@ -638,10 +653,13 @@ def main():
                     'error': f'Backup creation failed: {error_msg}',
                     'path': source_path
                 })
+                # Track volume state as failed
+                volume_states[volume] = {'state': 1, 'size_mb': 0}
                 # Update metrics immediately after failure
                 update_state(
                     volumes_backed_up=volumes_success,
-                    volumes_failed=volumes_failed
+                    volumes_failed=volumes_failed,
+                    volume_states=volume_states
                 )
                 # Clean up local file if it exists
                 if os.path.exists(local_backup_path):
@@ -656,10 +674,13 @@ def main():
                     'error': f'Upload failed: {error_msg}',
                     'path': source_path
                 })
+                # Track volume state as failed
+                volume_states[volume] = {'state': 1, 'size_mb': 0}
                 # Update metrics immediately after failure
                 update_state(
                     volumes_backed_up=volumes_success,
-                    volumes_failed=volumes_failed
+                    volumes_failed=volumes_failed,
+                    volume_states=volume_states
                 )
                 # Clean up local file if it exists
                 if os.path.exists(local_backup_path):
@@ -674,10 +695,13 @@ def main():
                     'error': f'Unexpected error: {error_msg}',
                     'path': source_path
                 })
+                # Track volume state as failed
+                volume_states[volume] = {'state': 1, 'size_mb': 0}
                 # Update metrics immediately after failure
                 update_state(
                     volumes_backed_up=volumes_success,
-                    volumes_failed=volumes_failed
+                    volumes_failed=volumes_failed,
+                    volume_states=volume_states
                 )
                 # Clean up local file if it exists
                 if os.path.exists(local_backup_path):
@@ -725,6 +749,8 @@ def main():
         volumes_failed=volumes_failed,
         current_operation=None,
         last_error=failed_volumes[-1]['error'] if failed_volumes else None,
+        volume_states=volume_states,
+        last_total_size_mb=round(total_size_bytes / (1024 * 1024), 2),
         last_verification=[{
             'volume': v['volume'],
             'sha256': v.get('sha256'),

@@ -167,7 +167,32 @@ class HealthHandler(BaseHTTPRequestHandler):
         metrics.append('# TYPE backup_uptime_seconds gauge')
         metrics.append(f'backup_uptime_seconds {uptime_seconds}')
         metrics.append('')
-        
+
+        # Total size of last backup cycle
+        metrics.append('# HELP backup_last_total_size Total size of last backup cycle in megabytes')
+        metrics.append('# TYPE backup_last_total_size gauge')
+        last_total_size_mb = state.get('last_total_size_mb', 0)
+        metrics.append(f'backup_last_total_size {last_total_size_mb}')
+        metrics.append('')
+
+        # Per-volume metrics with labels
+        volume_states = state.get('volume_states', {})
+
+        if volume_states:
+            metrics.append('# HELP backup_volume_size Volume backup size in megabytes')
+            metrics.append('# TYPE backup_volume_size gauge')
+            for volume, info in volume_states.items():
+                size_mb = info.get('size_mb', 0)
+                metrics.append(f'backup_volume_size{{volume="{volume}"}} {size_mb}')
+            metrics.append('')
+
+            metrics.append('# HELP backup_volume_state Volume backup state (0=success, 1=failed, 2=skipped)')
+            metrics.append('# TYPE backup_volume_state gauge')
+            for volume, info in volume_states.items():
+                state_value = info.get('state', 2)  # Default to skipped
+                metrics.append(f'backup_volume_state{{volume="{volume}"}} {state_value}')
+            metrics.append('')
+
         # Send response
         self.send_response(200)
         self.send_header('Content-Type', 'text/plain; version=0.0.4')
