@@ -13,17 +13,45 @@ import re
 import time
 
 import hashlib
+import json
 
-# Import health server utilities
-try:
-    from health_server import update_state
-    HEALTH_SERVER_AVAILABLE = True
-except ImportError as e:
-    HEALTH_SERVER_AVAILABLE = False
-    print(f"WARNING: Could not import health_server: {e}")
-    def update_state(*args, **kwargs):
-        print(f"DEBUG: update_state called but health_server not available: {kwargs}")
-        pass
+# Ensure script directory is in path for module imports
+script_dir = os.path.dirname(os.path.abspath(__file__))
+if script_dir not in sys.path:
+    sys.path.insert(0, script_dir)
+
+# State file for metrics (same as health_server.py)
+STATE_FILE = '/tmp/backup_state.json'
+
+def update_state(**kwargs):
+    """Update state file with new values
+
+    This is a standalone implementation that doesn't require health_server import.
+    Supports callable values that receive current state and return new value.
+    """
+    try:
+        # Read current state
+        state = {}
+        if os.path.exists(STATE_FILE):
+            with open(STATE_FILE, 'r') as f:
+                state = json.load(f)
+
+        # Process callable values
+        for key, value in kwargs.items():
+            if callable(value):
+                kwargs[key] = value(state)
+
+        # Update state
+        state.update(kwargs)
+
+        # Create directory if needed
+        os.makedirs(os.path.dirname(STATE_FILE), exist_ok=True)
+
+        # Write state atomically
+        with open(STATE_FILE, 'w') as f:
+            json.dump(state, f, indent=2)
+    except Exception as e:
+        print(f"ERROR: Failed to update state: {e}", file=sys.stderr)
 
 
 # Custom exception classes for better error categorization
@@ -487,7 +515,6 @@ def main():
     rclone_suffix = os.environ.get('RCL_SUFFIX', 'dockervolumes')
     sync_only = os.environ.get('SYNCONLY', '')
 
-    log(f"Health server integration: {'enabled' if HEALTH_SERVER_AVAILABLE else 'disabled'}", 'info')
     log(f"Host ID: {hostid}", 'info', hostid=hostid)
     log(f"Max backups to keep: {max_backups}", 'info', max_backups=max_backups)
     log(f"Base dir for volumes: {src_vol_base}", 'info', base_dir=src_vol_base)
