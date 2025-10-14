@@ -1,0 +1,124 @@
+version: '3.8'
+
+services:
+  backups-n-sync:
+    image: acaranta/backup_n_sync:latest
+    container_name: backups-n-sync
+    restart: unless-stopped
+    
+    # Health check configuration
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    
+    # Expose health check port
+    ports:
+      - "8080:8080"
+    
+    # Environment variables
+    environment:
+      # Backup schedule and behavior
+      - WAKEUPTIME=02:00          # Daily backup at 2 AM
+      - SKIPFIRSTRUN=false        # Run immediately if past wake time
+      - HOSTID=my-docker-host     # Identifier for this host
+      
+      # Directory paths
+      - SRC_VOL_BASE=/data        # Base directory for volumes to backup
+      - BKP_BASE_DIR=/backups     # Temporary local backup directory
+      
+      # Backup retention
+      - MAXBKP=7                  # Keep 7 backups on remote
+      
+      # Rclone configuration (REQUIRED)
+      - RCL_TARGET=MyCloudStorage # Your rclone remote name
+      - RCL_PREFIX=Backups        # Prefix path on remote
+      - RCL_SUFFIX=dockervolumes  # Suffix path on remote
+      
+      # Logging and monitoring
+      - LOG_LEVEL=INFO            # DEBUG, INFO, WARNING, ERROR, CRITICAL
+      - ENABLE_HEALTH_SERVER=true # Enable health check endpoints
+      - HEALTH_PORT=8080          # Health check server port
+      
+      # Optional: sync only mode (skip backup creation)
+      # - SYNCONLY=true
+    
+    volumes:
+      # Configuration files (read-only recommended)
+      - ./config/bns:/config/bns:ro
+      
+      # Rclone configuration (must be writable for rclone)
+      - ./config/rclone:/config/rclone
+      
+      # Temporary backup storage (only needs space for largest single backup)
+      - ./backups:/backups
+      
+      # Source data volumes to backup (read-only recommended for safety)
+      - /var/lib/docker/volumes:/data:ro
+      # Alternative: specific volumes
+      # - myapp_data:/data/myapp_data:ro
+      # - database_data:/data/database_data:ro
+    
+    # Optional: resource limits
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+          cpus: '1.0'
+        reservations:
+          memory: 256M
+          cpus: '0.25'
+    
+    # Network configuration
+    networks:
+      - backup-network
+
+  # Optional: Prometheus for metrics collection
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: prometheus
+    restart: unless-stopped
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./config/prometheus:/etc/prometheus:ro
+      - prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+      - '--storage.tsdb.retention.time=200h'
+      - '--web.enable-lifecycle'
+    networks:
+      - backup-network
+    profiles:
+      - monitoring
+
+  # Optional: Grafana for visualization
+  grafana:
+    image: grafana/grafana:latest
+    container_name: grafana
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./config/grafana:/etc/grafana/provisioning:ro
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_USERS_ALLOW_SIGN_UP=false
+    networks:
+      - backup-network
+    profiles:
+      - monitoring
+
+networks:
+  backup-network:
+    driver: bridge
+
+volumes:
+  prometheus_data:
+  grafana_data:
