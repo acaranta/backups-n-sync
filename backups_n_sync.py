@@ -524,7 +524,18 @@ def main():
     volumes_failed = 0
     failed_volumes = []  # Track which volumes failed and why
     successful_volumes = []  # Track successful backups
-    volume_states = {}  # Track per-volume state and size for metrics
+
+    # Load existing volume states from previous cycles - don't reset them
+    # Each volume's metrics will be updated only when that volume is backed up
+    existing_state = {}
+    if os.path.exists(STATE_FILE):
+        try:
+            with open(STATE_FILE, 'r') as f:
+                existing_state = json.load(f)
+        except Exception as e:
+            log(f"Failed to read existing state: {e}", 'warning')
+
+    volume_states = existing_state.get('volume_states', {})  # Preserve existing volume states
     total_size_bytes = 0  # Track total backup size
 
     # Check rclone config
