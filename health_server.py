@@ -172,6 +172,18 @@ class HealthHandler(BaseHTTPRequestHandler):
         metrics.append(f'backup_uptime_seconds{{backuphost="{hostid}"}} {uptime_seconds}')
         metrics.append('')
 
+        metrics.append('# HELP backup_status Current backup status (0=waiting, 1=running)')
+        metrics.append('# TYPE backup_status gauge')
+        backup_status = state.get('backup_status', 0)
+        metrics.append(f'backup_status{{backuphost="{hostid}"}} {backup_status}')
+        metrics.append('')
+
+        metrics.append('# HELP backup_time_until_next Time in seconds until next backup cycle (0 when running)')
+        metrics.append('# TYPE backup_time_until_next gauge')
+        backup_time_until_next = state.get('backup_time_until_next', 0)
+        metrics.append(f'backup_time_until_next{{backuphost="{hostid}"}} {backup_time_until_next}')
+        metrics.append('')
+
         # Total size of last backup cycle
         metrics.append('# HELP backup_last_total_size Total size of last backup cycle in megabytes')
         metrics.append('# TYPE backup_last_total_size gauge')

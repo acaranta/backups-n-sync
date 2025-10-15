@@ -108,13 +108,18 @@ def get_next_run_time(target_time):
 def run_backup():
     """Execute the backup script"""
     global backup_in_progress, shutdown_requested
-    
+
     log("=" * 50, 'info')
     log("Starting backup cycle", 'info')
     log("=" * 50, 'info')
-    
-    # Update state
-    update_state(status='running', current_operation='backup_cycle')
+
+    # Update state - set backup_status to 1 (running) and time_until_next to 0
+    update_state(
+        status='running',
+        current_operation='backup_cycle',
+        backup_status=1,
+        backup_time_until_next=0
+    )
     backup_in_progress = True
 
     start_time = time.time()
@@ -134,14 +139,15 @@ def run_backup():
             duration_seconds=f"{elapsed:.2f}")
         log("=" * 50, 'info')
         
-        # Update state on success
+        # Update state on success - set backup_status to 0 (waiting)
         update_state(
             status='idle',
             last_backup_status='success',
             last_backup_time=datetime.now().isoformat(),
             last_duration=elapsed,
             current_operation=None,
-            total_backups=lambda s: s.get('total_backups', 0) + 1
+            total_backups=lambda s: s.get('total_backups', 0) + 1,
+            backup_status=0
         )
         
         backup_in_progress = False
@@ -153,7 +159,7 @@ def run_backup():
             duration_seconds=f"{elapsed:.2f}", exit_code=e.returncode)
         log("=" * 50, 'error')
         
-        # Update state on failure
+        # Update state on failure - set backup_status to 0 (waiting)
         update_state(
             status='error',
             last_backup_status='failed',
@@ -161,7 +167,8 @@ def run_backup():
             last_duration=elapsed,
             last_error=f"Exit code {e.returncode}",
             current_operation=None,
-            total_failures=lambda s: s.get('total_failures', 0) + 1
+            total_failures=lambda s: s.get('total_failures', 0) + 1,
+            backup_status=0
         )
         
         backup_in_progress = False
@@ -203,7 +210,9 @@ def main():
     # Initialize state
     update_state(
         status='starting',
-        start_time=datetime.now().isoformat()
+        start_time=datetime.now().isoformat(),
+        backup_status=0,
+        backup_time_until_next=0
     )
 
     wakeup_time_str = os.environ.get('WAKEUPTIME', '')
@@ -216,9 +225,9 @@ def main():
     if not wakeup_time_str:
         # Run once and exit
         log("WAKEUPTIME is not set, running once", 'info')
-        update_state(status='running')
+        update_state(status='running', backup_status=1, backup_time_until_next=0)
         run_backup()
-        update_state(status='completed')
+        update_state(status='completed', backup_status=0, backup_time_until_next=0)
         return
 
     # Parse wakeup time
@@ -233,7 +242,7 @@ def main():
         now = datetime.now().time()
         if now >= wakeup_time:
             log("Current time is past wakeup time, running backup now", 'info')
-            update_state(status='idle')
+            update_state(status='idle', backup_status=0, backup_time_until_next=0)
             run_backup()
         else:
             next_run = get_next_run_time(wakeup_time)
@@ -243,7 +252,7 @@ def main():
                 next_run=next_run.strftime('%Y-%m-%d %H:%M:%S'))
             log(f"Waiting {int(wait_seconds)}s ({int(wait_seconds/3600)}h {int((wait_seconds%3600)/60)}m) until first run", 'info',
                 wait_seconds=int(wait_seconds))
-            update_state(status='idle')
+            update_state(status='idle', backup_status=0, backup_time_until_next=int(wait_seconds))
     else:
         next_run = get_next_run_time(wakeup_time)
         wait_seconds = (next_run - datetime.now()).total_seconds()
@@ -252,7 +261,7 @@ def main():
             next_run=next_run.strftime('%Y-%m-%d %H:%M:%S'))
         log(f"Waiting {int(wait_seconds)}s ({int(wait_seconds/3600)}h {int((wait_seconds%3600)/60)}m) until next run", 'info',
             wait_seconds=int(wait_seconds))
-        update_state(status='idle')
+        update_state(status='idle', backup_status=0, backup_time_until_next=int(wait_seconds))
 
     # Main loop
     while True:
@@ -269,7 +278,7 @@ def main():
         log(f"Going to sleep for {int(sleep_seconds)}s", 'debug', 
             sleep_seconds=int(sleep_seconds))
 
-        # Sleep in smaller intervals to check for shutdown
+        # Sleep in smaller intervals to check for shutdown and update metrics
         sleep_interval = 60  # Check every minute
         total_slept = 0
         while total_slept < sleep_seconds:
@@ -277,7 +286,11 @@ def main():
                 log("Shutdown requested during sleep, exiting", 'info')
                 update_state(status='stopped')
                 sys.exit(0)
-            
+
+            # Update time until next backup
+            remaining_seconds = int(sleep_seconds - total_slept)
+            update_state(backup_time_until_next=remaining_seconds)
+
             interval = min(sleep_interval, sleep_seconds - total_slept)
             time.sleep(interval)
             total_slept += interval
