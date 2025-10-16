@@ -41,7 +41,7 @@ ENV PATH="/root/.local/bin:${PATH}"
 COPY --from=rclone-downloader /usr/local/bin/rclone /usr/local/bin/rclone
 
 # Create required directories
-RUN mkdir -p /data /backups /config /tmp
+RUN mkdir -p /data /backups /config /tmp /var/cache/bkpnsync
 
 # Copy Python application
 COPY pyproject.toml /app/

@@ -124,6 +124,8 @@ services:
       - /srv/backupsconf/rclone/config/rclone:/config/rclone
       # Temporary backup directory (only needs space for 1 backup)
       - /srv/backups:/backups
+      # Persistent cache for metrics state (survives container restarts)
+      - /srv/cache:/var/cache/bkpnsync
       # Source data to backup (read-only recommended)
       - /srv/dockervolumes:/data:ro
     environment:
@@ -137,6 +139,33 @@ services:
       - RCL_PREFIX=Backups
       - RCL_SUFFIX=dockervolumes
     restart: unless-stopped
+```
+
+## Docker Run Example
+
+```bash
+docker run -d \
+  --name backups-n-sync \
+  --restart unless-stopped \
+  -p 8080:8080 \
+  -v /srv/backupsconf/bns:/config/bns:ro \
+  -v /srv/backupsconf/rclone/config/rclone:/config/rclone \
+  -v /srv/backups:/backups \
+  -v /srv/cache:/var/cache/bkpnsync \
+  -v /srv/dockervolumes:/data:ro \
+  -e SKIPFIRSTRUN=false \
+  -e WAKEUPTIME=09:20 \
+  -e HOSTID=my-server \
+  -e SRC_VOL_BASE=/data \
+  -e BKP_BASE_DIR=/backups \
+  -e MAXBKP=7 \
+  -e RCL_TARGET=MyCloudStorage \
+  -e RCL_PREFIX=Backups \
+  -e RCL_SUFFIX=dockervolumes \
+  -e LOG_LEVEL=INFO \
+  -e ENABLE_HEALTH_SERVER=true \
+  -e HEALTH_PORT=8080 \
+  acaranta/backup_n_sync:latest
 ```
 
 ## Configuration Files

@@ -20,8 +20,8 @@ script_dir = os.path.dirname(os.path.abspath(__file__))
 if script_dir not in sys.path:
     sys.path.insert(0, script_dir)
 
-# State file for metrics (same as health_server.py)
-STATE_FILE = '/tmp/backup_state.json'
+# State file for metrics (same as health_server.py) - persists across container restarts
+STATE_FILE = '/var/cache/bkpnsync/backup_state.json'
 
 def update_state(**kwargs):
     """Update state file with new values

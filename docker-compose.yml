@@ -48,13 +48,16 @@ services:
     volumes:
       # Configuration files (read-only recommended)
       - ./config/bns:/config/bns:ro
-      
+
       # Rclone configuration (must be writable for rclone)
       - ./config/rclone:/config/rclone
-      
+
       # Temporary backup storage (only needs space for largest single backup)
       - ./backups:/backups
-      
+
+      # Persistent cache for metrics state (survives container restarts)
+      - ./cache:/var/cache/bkpnsync
+
       # Source data volumes to backup (read-only recommended for safety)
       - /var/lib/docker/volumes:/data:ro
       # Alternative: specific volumes

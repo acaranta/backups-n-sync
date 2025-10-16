@@ -15,8 +15,8 @@ from datetime import datetime
 # Configure logging
 logger = logging.getLogger(__name__)
 
-# Shared state file for metrics
-STATE_FILE = '/tmp/backup_state.json'
+# Shared state file for metrics - persists across container restarts
+STATE_FILE = '/var/cache/bkpnsync/backup_state.json'
 
 
 def get_state():

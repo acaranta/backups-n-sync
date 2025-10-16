@@ -49,6 +49,7 @@ This directory contains a complete Docker Compose setup to showcase the backup-n
 - `config/bns/backup_pre_script.sh` - Global pre-backup script
 - `config/bns/backup_post_script.sh` - Global post-backup script
 - `config/rclone/rclone.conf` - Rclone cloud storage configuration
+- `cache/` - Persistent cache directory for metrics state (survives container restarts)
 
 ## Environment Variables
 
@@ -65,6 +66,12 @@ The docker-compose.yml includes examples of all key environment variables:
 The compose file shows different ways to mount volumes:
 
 ```yaml
+# Configuration and cache directories
+- ./config/bns:/config/bns:ro
+- ./config/rclone:/config/rclone
+- ./backups:/backups
+- ./cache:/var/cache/bkpnsync  # Persistent metrics state
+
 # All Docker volumes (read-only)
 - /var/lib/docker/volumes:/data:ro
 
