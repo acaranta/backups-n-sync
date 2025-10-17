@@ -29,3 +29,9 @@ cd /tmp
 unzip rclone.zip
 cd rclone-*-linux-${ARCHDL}
 
+# Copy binary file
+cp rclone /usr/local/bin/
+chown root:root /usr/local/bin/rclone
+chmod 755 /usr/local/bin/rclone
+
+
