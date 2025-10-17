@@ -7,8 +7,8 @@ if [ -f "/usr/bin/rclone" ] ; then
 	exit
 fi
 if [ ! -f /usr/bin/curl ] || [ ! -f /usr/bin/unzip ] ; then
-	sudo apt-get update
-	sudo apt-get install -y curl unzip
+	apt-get update
+	apt-get install -y curl unzip
 fi
 case "$(uname -i)" in
   x86_64)
@@ -28,10 +28,4 @@ curl -o /tmp/rclone.zip https://downloads.rclone.org/rclone-current-linux-${ARCH
 cd /tmp
 unzip rclone.zip
 cd rclone-*-linux-${ARCHDL}
-
-# Copy binary file
-sudo cp rclone /usr/local/bin/
-sudo chown root:root /usr/local/bin/rclone
-sudo chmod 755 /usr/local/bin/rclone
-
 
