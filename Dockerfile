@@ -1,13 +1,15 @@
 # Multi-stage build for minimal image size
 # Stage 1: Get rclone binary
 FROM alpine:3.20 AS rclone-downloader
-ARG RCLONE_VERSION=v1.68.1
-RUN apk add --no-cache curl unzip && \
-    curl -O https://downloads.rclone.org/${RCLONE_VERSION}/rclone-${RCLONE_VERSION}-linux-amd64.zip && \
-    unzip rclone-${RCLONE_VERSION}-linux-amd64.zip && \
-    mv rclone-${RCLONE_VERSION}-linux-amd64/rclone /usr/local/bin/ && \
-    chmod +x /usr/local/bin/rclone && \
-    rm -rf rclone-*
+ADD install-rclone.sh /tmp/install-rclone.sh
+RUN chmod +x /tmp/install-rclone.sh && /tmp/install-rclone.sh
+# ARG RCLONE_VERSION=v1.68.1
+# RUN apk add --no-cache curl unzip && \
+#     curl -O https://downloads.rclone.org/${RCLONE_VERSION}/rclone-${RCLONE_VERSION}-linux-amd64.zip && \
+#     unzip rclone-${RCLONE_VERSION}-linux-amd64.zip && \
+#     mv rclone-${RCLONE_VERSION}-linux-amd64/rclone /usr/local/bin/ && \
+#     chmod +x /usr/local/bin/rclone && \
+#     rm -rf rclone-*
 
 # Stage 2: Final minimal image
 FROM ubuntu:noble
