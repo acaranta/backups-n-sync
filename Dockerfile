@@ -21,7 +21,9 @@ RUN echo "tzdata tzdata/Areas select Europe" | debconf-set-selections && \
   echo "tzdata tzdata/Zones/Europe select Paris" | debconf-set-selections && \
   echo "locales locales/locales_to_be_generated multiselect C.UTF-8 UTF-8" | debconf-set-selections && \
   echo "locales locales/default_environment_locale select C.UTF-8" | debconf-set-selections && \
-  apt-get update && \
+  apt-key adv --keyserver keyserver.ubuntu.com --recv-keys 7FCC7D46ACCC4CF8 && \
+  echo "deb http://apt.postgresql.org/pub/repos/apt noble-pgdg main" > /etc/apt/sources.list.d/pgdg.list && \
+  apt update && \
   apt-get install -y --no-install-recommends \
     ca-certificates \
     tzdata \
@@ -31,7 +33,7 @@ RUN echo "tzdata tzdata/Areas select Europe" | debconf-set-selections && \
     curl \
     jq \
     mysql-client \
-    postgresql-client \
+    postgresql-client-17 \
     && \
   echo "user_allow_other" >> /etc/fuse.conf && \
   apt-get clean && \
