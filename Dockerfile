@@ -51,11 +51,13 @@ COPY pyproject.toml /app/
 COPY backups_n_sync.py /usr/local/bin/
 COPY health_server.py /
 COPY entrypoint.py /
-COPY port_action.sh /bkpscripts
 RUN chmod +x /usr/local/bin/backups_n_sync.py && \
-    chmod +x /health_server.py && \
-    chmod +x /entrypoint.py && \
-    chmod +x /bkpscripts/port_action.sh
+chmod +x /health_server.py && \
+chmod +x /entrypoint.py
+
+# Install common scripts
+COPY scripts/* /bkpscripts
+RUN chmod +x /bkpscripts/*
 
 ENV XDG_CONFIG_HOME=/config
 
