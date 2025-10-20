@@ -121,7 +121,7 @@ get_mysql_databases() {
 
 get_postgresql_databases() {
     local dblist
-    PGPASSWORD="${DB_PASS}" dblist=$(psql -h "${DB_HOST}" -p "${DB_PORT}" -U "${DB_USER}" -d postgres -t -c "SELECT datname FROM pg_database WHERE datistemplate = false;" 2>/dev/null | \
+    dblist=$(PGPASSWORD="${DB_PASS}" psql -h "${DB_HOST}" -p "${DB_PORT}" -U "${DB_USER}" -d postgres -t -c "SELECT datname FROM pg_database WHERE datistemplate = false;" 2>/dev/null | \
              sed 's/^[[:space:]]*//;s/[[:space:]]*$//' | \
              grep -v '^postgres$' | \
              grep -v '^template0$' | \
