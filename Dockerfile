@@ -30,6 +30,8 @@ RUN echo "tzdata tzdata/Areas select Europe" | debconf-set-selections && \
     python3-pip \
     curl \
     jq \
+    mysql-client \
+    postgresql-client \
     && \
   echo "user_allow_other" >> /etc/fuse.conf && \
   apt-get clean && \
