@@ -652,6 +652,9 @@ def main():
                 # Create the backup
                 size_bytes = create_backup(source_path, local_backup_path)
 
+                # Run volume-specific postscript if it exists
+                run_volume_postscript(source_path, volume)
+
                 # Calculate SHA256
                 sha256sum = calculate_sha256(local_backup_path)
                 log("SHA256 checksum", 'info', file=local_backup_path, sha256=sha256sum)
@@ -680,8 +683,6 @@ def main():
                 # Apply retention policy on remote
                 apply_retention_policy(rclone_target, remote_base_path, max_backups)
 
-                # Run volume-specific postscript if it exists
-                run_volume_postscript(source_path, volume)
 
                 # Track success
                 volumes_success += 1
