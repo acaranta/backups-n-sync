@@ -570,6 +570,16 @@ def main():
         if not volumes:
             log("No volumes to backup", 'warning')
 
+        # Purge volumes from cache that are no longer in the backup list
+        volumes_to_purge = [v for v in volume_states.keys() if v not in volumes]
+        if volumes_to_purge:
+            log(f"Purging {len(volumes_to_purge)} volume(s) from metrics cache (no longer in backup list)", 'info')
+            for volume in volumes_to_purge:
+                log(f"Removing from metrics cache: {volume}", 'debug', volume=volume)
+                del volume_states[volume]
+            # Update state immediately after purging
+            update_state(volume_states=volume_states)
+
         # Process each volume
         for volume in volumes:
             log("----------------------------------", 'info')
