@@ -716,7 +716,11 @@ def main():
 
             except BackupCreationError as e:
                 # Run volume-specific postscript even on backup failure to ensure containers are restarted
-                run_volume_postscript(source_path, volume)
+                try:
+                    run_volume_postscript(source_path, volume)
+                except Exception as postscript_error:
+                    log(f"Failed to run volume postscript after backup failure: {postscript_error}",
+                        'error', volume=volume)
 
                 error_msg = str(e)
                 log(f"Failed to create backup: {e}", 'error', volume=volume)
