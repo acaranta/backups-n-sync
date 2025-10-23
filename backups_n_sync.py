@@ -652,7 +652,7 @@ def main():
                 # Create the backup
                 size_bytes = create_backup(source_path, local_backup_path)
 
-                # Run volume-specific postscript if it exists
+                # Run volume-specific postscript if it exists (restart container ASAP after backup)
                 run_volume_postscript(source_path, volume)
 
                 # Calculate SHA256
@@ -715,6 +715,9 @@ def main():
                 )
 
             except BackupCreationError as e:
+                # Run volume-specific postscript even on backup failure to ensure containers are restarted
+                run_volume_postscript(source_path, volume)
+
                 error_msg = str(e)
                 log(f"Failed to create backup: {e}", 'error', volume=volume)
                 volumes_failed += 1
