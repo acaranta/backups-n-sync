@@ -4,5 +4,8 @@ load: docker-build-multiarch.yaml
 data:
   dockerfiledir: .
   imagename: infra/backup_n_sync
+  hubimagename: backup_n_sync
+  repotype: both
+  buildarch: linux/arm64/v8,linux/amd64
   imagetag: latest  
   branches: ['master', 'main']
